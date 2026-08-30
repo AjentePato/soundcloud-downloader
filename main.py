@@ -4,6 +4,7 @@ import glob
 import json
 import urllib.request
 import urllib.parse
+import concurrent.futures
 from datetime import datetime
 from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
@@ -30,6 +31,24 @@ def palavras(s):
 def limpar_ansi(texto):
     return re.sub(r"\x1b\[[0-9;]*m", "", texto)
 
+def obter_og_image(url):
+    """Extrai a capa real do SoundCloud via meta tag og:image"""
+    if not url:
+        return None
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        with urllib.request.urlopen(req, timeout=4) as r:
+            html = r.read(250000).decode("utf-8", "ignore")
+        m = re.search(r'<meta\s+property="og:image"\s+content="([^"]+)"', html)
+        if m:
+            return m.group(1)
+        m2 = re.search(r'<meta\s+content="([^"]+)"\s+property="og:image"', html)
+        if m2:
+            return m2.group(1)
+        return None
+    except Exception:
+        return None
+
 def embutir_capa_url(arquivo, url):
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -52,7 +71,7 @@ def buscar_itunes_capa(nome):
         termo = urllib.parse.quote(f"{artista} {titulo}" if sep else nome)
         url_api = f"https://itunes.apple.com/search?term={termo}&media=music&entity=song&limit=5"
         req = urllib.request.Request(url_api, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=8) as r:
             data = json.load(r)
         qa = palavras(artista)
         qt = palavras(titulo if sep else nome)
@@ -113,7 +132,7 @@ HTML_PAGE = """<!DOCTYPE html>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style> body { font-family: 'Plus Jakarta Sans', sans-serif; } </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center py-8 px-4">
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center py-6 px-4">
   <div class="w-full max-w-2xl bg-slate-900 border border-slate-800/80 rounded-2xl p-5 sm:p-7 shadow-2xl">
     
     <!-- Cabeçalho -->
@@ -144,7 +163,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="space-y-2 mb-5">
       <label class="block text-xs font-semibold text-slate-300">Digite o nome da música ou cole o link do SoundCloud:</label>
       <div class="flex gap-2">
-        <input type="text" id="queryInput" placeholder="Ex: Alok Deep Down OU https://soundcloud.com/..." onkeydown="if(event.key==='Enter') pesquisar()" class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500 transition-colors" />
+        <input type="text" id="queryInput" placeholder="Ex: Misery ou https://soundcloud.com/..." onkeydown="if(event.key==='Enter') pesquisar()" class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500 transition-colors" />
         <button id="btnBuscar" onclick="pesquisar()" class="bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs px-5 py-3 rounded-xl transition shadow-lg shadow-orange-500/20 flex items-center justify-center cursor-pointer shrink-0">🔍 Buscar</button>
       </div>
       <div id="statusMsg" class="hidden text-xs font-semibold py-1.5 text-center"></div>
@@ -180,7 +199,7 @@ HTML_PAGE = """<!DOCTYPE html>
       btn.disabled = true;
       btn.innerText = "Buscando...";
       status.className = "text-center text-xs font-semibold text-orange-400 py-2 block";
-      status.innerText = "Pesquisando faixas no SoundCloud...";
+      status.innerText = "Pesquisando faixas e carregando capas em HD...";
       container.innerHTML = "";
 
       const formData = new FormData();
@@ -200,10 +219,10 @@ HTML_PAGE = """<!DOCTYPE html>
           div.className = "flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950 border border-slate-800/80 p-3.5 rounded-xl hover:border-slate-700 transition";
           div.innerHTML = `
             <div class="flex items-center gap-3 min-w-0 flex-1">
-              ${item.thumb ? `<img src="${item.thumb}" class="w-12 h-12 rounded-lg object-cover border border-slate-800 shrink-0">` : `<div class="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center shrink-0">🎵</div>`}
+              ${item.thumb ? `<img src="${item.thumb}" class="w-14 h-14 rounded-lg object-cover border border-slate-800 shrink-0 shadow-sm" alt="Capa">` : `<div class="w-14 h-14 bg-slate-800 rounded-lg flex items-center justify-center text-lg shrink-0">🎵</div>`}
               <div class="min-w-0 flex-1">
                 <h4 class="text-xs font-bold text-white truncate">${item.titulo}</h4>
-                <p class="text-[11px] text-slate-400 truncate">${item.artista} ${item.duracao ? `• ${item.duracao}` : ''}</p>
+                <p class="text-[11px] text-slate-400 truncate mt-0.5">${item.artista} ${item.duracao ? `• ${item.duracao}` : ''}</p>
               </div>
             </div>
             <div class="flex items-center gap-2 self-end sm:self-center shrink-0">
@@ -262,7 +281,6 @@ HTML_PAGE = """<!DOCTYPE html>
           throw new Error(data.detail || "Erro ao baixar.");
         }
 
-        // Recupera o nome correto enviado pelo servidor
         const disposition = response.headers.get('Content-Disposition');
         let filename = tituloOriginal ? `${tituloOriginal}.mp3` : "musica.mp3";
         if (disposition && disposition.indexOf('filename=') !== -1) {
@@ -340,44 +358,69 @@ async def buscar_faixas(query: str = Form(...)):
     if not query:
         raise HTTPException(status_code=400, detail="Digite uma busca válida.")
     
+    # Se for link direto
     if query.startswith("http"):
         try:
             with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
                 info = ydl.extract_info(query, download=False)
+                thumb = info.get("thumbnail") or obter_og_image(query)
                 return {
                     "resultados": [{
                         "url": query,
                         "titulo": info.get("title", "Sem título"),
                         "artista": info.get("uploader", "Desconhecido"),
                         "duracao": info.get("duration_string", ""),
-                        "thumb": info.get("thumbnail")
+                        "thumb": thumb
                     }]
                 }
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Erro no link: {limpar_ansi(str(e))}")
 
+    # Pesquisa de 10 faixas no SoundCloud com busca paralela de capas
     try:
         with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "extract_flat": True}) as ydl:
             info = ydl.extract_info(f"scsearch10:{query}", download=False)
             entradas = info.get("entries") or []
-            resultados = []
-            for ent in entradas:
+            
+            raw_resultados = []
+            urls_sem_capa = []
+            
+            for idx, ent in enumerate(entradas):
                 if not ent:
                     continue
-                resultados.append({
-                    "url": ent.get("webpage_url") or ent.get("url"),
-                    "titulo": ent.get("title") or "Sem título",
-                    "artista": ent.get("uploader") or "SoundCloud",
-                    "duracao": ent.get("duration_string") or "",
-                    "thumb": ent.get("thumbnail")
+                url = ent.get("webpage_url") or ent.get("url")
+                titulo = ent.get("title") or "Sem título"
+                artista = ent.get("uploader") or "SoundCloud"
+                dur = ent.get("duration_string") or ""
+                thumb = ent.get("thumbnail")
+                
+                raw_resultados.append({
+                    "url": url,
+                    "titulo": titulo,
+                    "artista": artista,
+                    "duracao": dur,
+                    "thumb": thumb
                 })
-            return {"resultados": resultados}
+                
+                if not thumb and url:
+                    urls_sem_capa.append((idx, url))
+
+            # Busca capas em paralelo com Threads para máxima velocidade
+            if urls_sem_capa:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+                    futuros = {executor.submit(obter_og_image, u): i for i, u in urls_sem_capa}
+                    for fut in concurrent.futures.as_completed(futuros):
+                        idx = futuros[fut]
+                        img_url = fut.result()
+                        if img_url:
+                            raw_resultados[idx]["thumb"] = img_url
+
+            return {"resultados": raw_resultados}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro na busca: {limpar_ansi(str(e))}")
 
 @app.post("/api/stream")
 async def obter_stream(url: str = Form(...)):
-    """Obtém a URL direta do áudio para tocar a prévia no navegador"""
     try:
         with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "format": "bestaudio"}) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -428,7 +471,7 @@ async def baixar_mp3(url: str = Form(...)):
             info = ydl.extract_info(url, download=True)
             titulo = info.get("title", "musica")
             artista = info.get("uploader", "")
-            thumb = info.get("thumbnail")
+            thumb = info.get("thumbnail") or obter_og_image(url)
 
         arquivo_final = None
         for arq, _, _, _ in baixados:
