@@ -31,6 +31,18 @@ def palavras(s):
 def limpar_ansi(texto):
     return re.sub(r"\x1b\[[0-9;]*m", "", texto)
 
+def fmt_duracao(segundos):
+    """Converte segundos em mm:ss de forma precisa"""
+    if segundos is None:
+        return ""
+    try:
+        seg = int(float(segundos))
+        minutos = seg // 60
+        seg_rest = seg % 60
+        return f"{minutos}:{seg_rest:02d}"
+    except Exception:
+        return ""
+
 def obter_og_image(url):
     """Extrai a capa real do SoundCloud via meta tag og:image"""
     if not url:
@@ -141,7 +153,7 @@ HTML_PAGE = """<!DOCTYPE html>
         <div class="w-11 h-11 bg-orange-500/20 text-orange-400 rounded-xl flex items-center justify-center font-bold text-2xl border border-orange-500/30">☁️</div>
         <div>
           <h1 class="text-lg font-bold text-white tracking-tight">SoundCloud Downloader</h1>
-          <p class="text-[11px] text-slate-400 font-medium">MP3 320kbps • Player de Prévia • Capas HD</p>
+          <p class="text-[11px] text-slate-400 font-medium">MP3 320kbps • Player de Prévia • Duração Completa</p>
         </div>
       </div>
       <button onclick="carregarHistorico()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition cursor-pointer">🕒 Histórico</button>
@@ -199,7 +211,7 @@ HTML_PAGE = """<!DOCTYPE html>
       btn.disabled = true;
       btn.innerText = "Buscando...";
       status.className = "text-center text-xs font-semibold text-orange-400 py-2 block";
-      status.innerText = "Pesquisando faixas e carregando capas em HD...";
+      status.innerText = "Pesquisando faixas, durações e capas em HD...";
       container.innerHTML = "";
 
       const formData = new FormData();
@@ -216,13 +228,28 @@ HTML_PAGE = """<!DOCTYPE html>
         status.classList.add('hidden');
         data.resultados.forEach(item => {
           const div = document.createElement('div');
-          div.className = "flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950 border border-slate-800/80 p-3.5 rounded-xl hover:border-slate-700 transition";
+          const isCurto = item.segundos && item.segundos <= 45;
+
+          div.className = `flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950 border ${isCurto ? 'border-rose-900/60' : 'border-slate-800/80'} p-3.5 rounded-xl hover:border-slate-700 transition`;
           div.innerHTML = `
             <div class="flex items-center gap-3 min-w-0 flex-1">
               ${item.thumb ? `<img src="${item.thumb}" class="w-14 h-14 rounded-lg object-cover border border-slate-800 shrink-0 shadow-sm" alt="Capa">` : `<div class="w-14 h-14 bg-slate-800 rounded-lg flex items-center justify-center text-lg shrink-0">🎵</div>`}
               <div class="min-w-0 flex-1">
                 <h4 class="text-xs font-bold text-white truncate">${item.titulo}</h4>
-                <p class="text-[11px] text-slate-400 truncate mt-0.5">${item.artista} ${item.duracao ? `• ${item.duracao}` : ''}</p>
+                <p class="text-[11px] text-slate-400 truncate mt-0.5">${item.artista}</p>
+                
+                <div class="flex items-center gap-2 mt-1.5 flex-wrap">
+                  ${item.duracao ? `
+                    <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                      ⏱ ${item.duracao}
+                    </span>
+                  ` : ''}
+                  ${isCurto ? `
+                    <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800">
+                      ⚠️ Prévia / Trecho curto (${item.duracao})
+                    </span>
+                  ` : ''}
+                </div>
               </div>
             </div>
             <div class="flex items-center gap-2 self-end sm:self-center shrink-0">
@@ -364,19 +391,21 @@ async def buscar_faixas(query: str = Form(...)):
             with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
                 info = ydl.extract_info(query, download=False)
                 thumb = info.get("thumbnail") or obter_og_image(query)
+                duracao_seg = info.get("duration")
                 return {
                     "resultados": [{
                         "url": query,
                         "titulo": info.get("title", "Sem título"),
                         "artista": info.get("uploader", "Desconhecido"),
-                        "duracao": info.get("duration_string", ""),
+                        "duracao": info.get("duration_string") or fmt_duracao(duracao_seg),
+                        "segundos": duracao_seg,
                         "thumb": thumb
                     }]
                 }
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Erro no link: {limpar_ansi(str(e))}")
 
-    # Pesquisa de 10 faixas no SoundCloud com busca paralela de capas
+    # Pesquisa de 10 faixas no SoundCloud com cálculo de duração e busca de capas
     try:
         with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "extract_flat": True}) as ydl:
             info = ydl.extract_info(f"scsearch10:{query}", download=False)
@@ -391,21 +420,23 @@ async def buscar_faixas(query: str = Form(...)):
                 url = ent.get("webpage_url") or ent.get("url")
                 titulo = ent.get("title") or "Sem título"
                 artista = ent.get("uploader") or "SoundCloud"
-                dur = ent.get("duration_string") or ""
+                dur_seg = ent.get("duration")
+                dur_fmt = ent.get("duration_string") or fmt_duracao(dur_seg)
                 thumb = ent.get("thumbnail")
                 
                 raw_resultados.append({
                     "url": url,
                     "titulo": titulo,
                     "artista": artista,
-                    "duracao": dur,
+                    "duracao": dur_fmt,
+                    "segundos": dur_seg,
                     "thumb": thumb
                 })
                 
                 if not thumb and url:
                     urls_sem_capa.append((idx, url))
 
-            # Busca capas em paralelo com Threads para máxima velocidade
+            # Busca capas em paralelo com Threads
             if urls_sem_capa:
                 with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
                     futuros = {executor.submit(obter_og_image, u): i for i, u in urls_sem_capa}
