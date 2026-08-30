@@ -32,7 +32,6 @@ def limpar_ansi(texto):
     return re.sub(r"\x1b\[[0-9;]*m", "", texto)
 
 def fmt_duracao(segundos):
-    """Converte segundos em mm:ss de forma precisa"""
     if segundos is None:
         return ""
     try:
@@ -44,7 +43,6 @@ def fmt_duracao(segundos):
         return ""
 
 def obter_og_image(url):
-    """Extrai a capa real do SoundCloud via meta tag og:image"""
     if not url:
         return None
     try:
@@ -77,24 +75,29 @@ def embutir_capa_url(arquivo, url):
     except Exception:
         return False
 
-def buscar_itunes_capa(nome):
+def buscar_itunes_capa(nome, artista=""):
     try:
-        artista, sep, titulo = nome.partition(" - ")
-        termo = urllib.parse.quote(f"{artista} {titulo}" if sep else nome)
+        nome_limpo = f"{artista} {nome}" if artista and artista != "SoundCloud" else nome
+        termo = urllib.parse.quote(nome_limpo.strip())
         url_api = f"https://itunes.apple.com/search?term={termo}&media=music&entity=song&limit=5"
         req = urllib.request.Request(url_api, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=8) as r:
             data = json.load(r)
+        
         qa = palavras(artista)
-        qt = palavras(titulo if sep else nome)
+        qt = palavras(nome)
+        
         for res in data.get("results", []):
             ra = palavras(res.get("artistName"))
             rt = palavras(res.get("trackName"))
-            score = (len(qa & ra) + len(qt & rt)) if sep else len(qt & (ra | rt))
+            score = (len(qa & ra) + len(qt & rt)) if artista else len(qt & (ra | rt))
             if score > 0:
                 art = res.get("artworkUrl100")
                 if art:
-                    return art.replace("100x100bb", "600x600bb")
+                    return {
+                        "capa": art.replace("100x100bb", "600x600bb"),
+                        "detalhes": f"{res.get('artistName')} - {res.get('trackName')} ({res.get('collectionName', 'Single')})"
+                    }
         return None
     except Exception:
         return None
@@ -153,7 +156,7 @@ HTML_PAGE = """<!DOCTYPE html>
         <div class="w-11 h-11 bg-orange-500/20 text-orange-400 rounded-xl flex items-center justify-center font-bold text-2xl border border-orange-500/30">☁️</div>
         <div>
           <h1 class="text-lg font-bold text-white tracking-tight">SoundCloud Downloader</h1>
-          <p class="text-[11px] text-slate-400 font-medium">MP3 320kbps • Player de Prévia • Duração Completa</p>
+          <p class="text-[11px] text-slate-400 font-medium">MP3 320kbps • Capas Oficiais iTunes • Tags ID3</p>
         </div>
       </div>
       <button onclick="carregarHistorico()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition cursor-pointer">🕒 Histórico</button>
@@ -184,6 +187,39 @@ HTML_PAGE = """<!DOCTYPE html>
     <!-- Lista de Resultados -->
     <div id="resultadosContainer" class="space-y-2.5"></div>
 
+    <!-- Modal de Escolha de Capa (iTunes vs SoundCloud) -->
+    <div id="modalCapa" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 shadow-2xl text-center">
+        <div class="w-10 h-10 bg-blue-500/20 text-blue-400 rounded-xl flex items-center justify-center mx-auto mb-2 text-xl border border-blue-500/30">🎨</div>
+        <h3 class="font-bold text-sm text-white">Deseja trocar a capa da música?</h3>
+        <p class="text-xs text-slate-400 mt-1 mb-4" id="modalCapaSubtitulo">Encontramos a capa oficial no iTunes em alta definição:</p>
+        
+        <!-- Comparação lado a lado -->
+        <div class="grid grid-cols-2 gap-3 mb-5">
+          <div class="bg-slate-950 border border-slate-800 p-2.5 rounded-xl flex flex-col items-center">
+            <span class="text-[10px] font-bold text-slate-400 uppercase mb-1.5">Original (SoundCloud)</span>
+            <img id="imgCapaOriginal" src="" class="w-28 h-28 object-cover rounded-lg border border-slate-800 mb-2">
+          </div>
+          <div class="bg-slate-950 border border-emerald-500/40 p-2.5 rounded-xl flex flex-col items-center">
+            <span class="text-[10px] font-bold text-emerald-400 uppercase mb-1.5">Oficial (iTunes HD)</span>
+            <img id="imgCapaItunes" src="" class="w-28 h-28 object-cover rounded-lg border border-emerald-500/30 mb-2">
+          </div>
+        </div>
+
+        <p id="txtDetalhesItunes" class="text-[11px] text-slate-300 mb-5 line-clamp-1 italic bg-slate-950 py-1 px-2 rounded"></p>
+
+        <!-- Botões de Decisão -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <button id="btnUsarOriginal" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-2.5 px-3 rounded-xl transition cursor-pointer">
+            ❌ Manter Original
+          </button>
+          <button id="btnUsarItunes" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-3 rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer">
+            ✅ Trocar p/ iTunes
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal de Histórico -->
     <div id="modalHistorico" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-5 max-h-[80vh] flex flex-col">
@@ -211,7 +247,7 @@ HTML_PAGE = """<!DOCTYPE html>
       btn.disabled = true;
       btn.innerText = "Buscando...";
       status.className = "text-center text-xs font-semibold text-orange-400 py-2 block";
-      status.innerText = "Pesquisando faixas, durações e capas em HD...";
+      status.innerText = "Pesquisando faixas, durações e capas...";
       container.innerHTML = "";
 
       const formData = new FormData();
@@ -256,7 +292,7 @@ HTML_PAGE = """<!DOCTYPE html>
               <button onclick="ouvirPrevia('${item.url}', '${item.titulo.replace(/'/g, "\\'")}')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-2 rounded-lg transition flex items-center gap-1 cursor-pointer">
                 ▶ Ouvir
               </button>
-              <button onclick="baixarMusica('${item.url}', '${item.titulo.replace(/'/g, "\\'")}', this)" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg transition flex items-center gap-1.5 shadow-sm shadow-emerald-600/20 cursor-pointer">
+              <button onclick="prepararDownload('${item.url}', '${item.titulo.replace(/'/g, "\\'")}', '${item.artista.replace(/'/g, "\\'")}', '${item.thumb || ''}', this)" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg transition flex items-center gap-1.5 shadow-sm shadow-emerald-600/20 cursor-pointer">
                 ⬇ Baixar MP3
               </button>
             </div>
@@ -294,12 +330,61 @@ HTML_PAGE = """<!DOCTYPE html>
       }
     }
 
-    async function baixarMusica(url, tituloOriginal, btn) {
+    async function prepararDownload(url, titulo, artista, thumbOriginal, btn) {
       const originalText = btn.innerHTML;
       btn.disabled = true;
+      btn.innerHTML = "🎨 Verificando capa...";
+
+      // Consulta se o iTunes tem capa para essa música
+      const formData = new FormData();
+      formData.append('titulo', titulo);
+      formData.append('artista', artista);
+
+      try {
+        const res = await fetch('/api/consultar-capa', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (data.itunes) {
+          // Exibe o modal para o usuário escolher entre iTunes e Original
+          abrirModalCapa(url, titulo, thumbOriginal, data.itunes.capa, data.itunes.detalhes, btn, originalText);
+        } else {
+          // Se não achou no iTunes, baixa direto com a capa original
+          executarDownload(url, titulo, thumbOriginal, btn, originalText);
+        }
+      } catch (err) {
+        // Fallback: baixa com a original
+        executarDownload(url, titulo, thumbOriginal, btn, originalText);
+      }
+    }
+
+    function abrirModalCapa(url, titulo, capaOriginal, capaItunes, detalhes, btn, originalBtnText) {
+      const modal = document.getElementById('modalCapa');
+      document.getElementById('imgCapaOriginal').src = capaOriginal || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=80";
+      document.getElementById('imgCapaItunes').src = capaItunes;
+      document.getElementById('txtDetalhesItunes').innerText = detalhes;
+
+      document.getElementById('btnUsarOriginal').onclick = () => {
+        modal.classList.add('hidden');
+        executarDownload(url, titulo, capaOriginal, btn, originalBtnText);
+      };
+
+      document.getElementById('btnUsarItunes').onclick = () => {
+        modal.classList.add('hidden');
+        executarDownload(url, titulo, capaItunes, btn, originalBtnText);
+      };
+
+      modal.classList.remove('hidden');
+    }
+
+    async function executarDownload(url, tituloOriginal, capaFinal, btn, originalText) {
+      btn.disabled = true;
       btn.innerHTML = "⏳ Baixando...";
+
       const formData = new FormData();
       formData.append('url', url);
+      if (capaFinal) {
+        formData.append('capa_custom', capaFinal);
+      }
 
       try {
         const response = await fetch('/api/download', { method: 'POST', body: formData });
@@ -385,7 +470,6 @@ async def buscar_faixas(query: str = Form(...)):
     if not query:
         raise HTTPException(status_code=400, detail="Digite uma busca válida.")
     
-    # Se for link direto
     if query.startswith("http"):
         try:
             with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
@@ -405,7 +489,6 @@ async def buscar_faixas(query: str = Form(...)):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Erro no link: {limpar_ansi(str(e))}")
 
-    # Pesquisa de 10 faixas no SoundCloud com cálculo de duração e busca de capas
     try:
         with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "extract_flat": True}) as ydl:
             info = ydl.extract_info(f"scsearch10:{query}", download=False)
@@ -436,7 +519,6 @@ async def buscar_faixas(query: str = Form(...)):
                 if not thumb and url:
                     urls_sem_capa.append((idx, url))
 
-            # Busca capas em paralelo com Threads
             if urls_sem_capa:
                 with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
                     futuros = {executor.submit(obter_og_image, u): i for i, u in urls_sem_capa}
@@ -449,6 +531,12 @@ async def buscar_faixas(query: str = Form(...)):
             return {"resultados": raw_resultados}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro na busca: {limpar_ansi(str(e))}")
+
+@app.post("/api/consultar-capa")
+async def consultar_capa(titulo: str = Form(...), artista: str = Form("")):
+    """Busca se o iTunes tem capa oficial para esta música"""
+    itunes_info = buscar_itunes_capa(titulo, artista)
+    return {"itunes": itunes_info}
 
 @app.post("/api/stream")
 async def obter_stream(url: str = Form(...)):
@@ -471,7 +559,7 @@ async def obter_stream(url: str = Form(...)):
         raise HTTPException(status_code=400, detail=f"Erro ao obter prévia: {limpar_ansi(str(e))}")
 
 @app.post("/api/download")
-async def baixar_mp3(url: str = Form(...)):
+async def baixar_mp3(url: str = Form(...), capa_custom: str = Form(None)):
     url = url.strip()
     if not url:
         raise HTTPException(status_code=400, detail="URL inválida.")
@@ -519,10 +607,10 @@ async def baixar_mp3(url: str = Form(...)):
             raise Exception("Não foi possível gerar o arquivo MP3.")
 
         corrigir_tags(arquivo_final)
-        nome_faixa = os.path.splitext(os.path.basename(arquivo_final))[0]
-        capa_itunes = buscar_itunes_capa(nome_faixa)
-        if capa_itunes:
-            embutir_capa_url(arquivo_final, capa_itunes)
+        
+        # Se o usuário escolheu uma capa específica (iTunes ou Original selecionada), usa ela
+        if capa_custom and capa_custom.startswith("http"):
+            embutir_capa_url(arquivo_final, capa_custom)
         elif thumb:
             embutir_capa_url(arquivo_final, thumb)
 
