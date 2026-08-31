@@ -187,34 +187,61 @@ HTML_PAGE = """<!DOCTYPE html>
     <!-- Lista de Resultados -->
     <div id="resultadosContainer" class="space-y-2.5"></div>
 
-    <!-- Modal de Escolha de Capa (iTunes vs SoundCloud) -->
+    <!-- Modal 1: Comparação de Capa (iTunes Encontrado) -->
     <div id="modalCapa" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 shadow-2xl text-center">
         <div class="w-10 h-10 bg-blue-500/20 text-blue-400 rounded-xl flex items-center justify-center mx-auto mb-2 text-xl border border-blue-500/30">🎨</div>
         <h3 class="font-bold text-sm text-white">Deseja trocar a capa da música?</h3>
-        <p class="text-xs text-slate-400 mt-1 mb-4" id="modalCapaSubtitulo">Encontramos a capa oficial no iTunes em alta definição:</p>
+        <p class="text-xs text-slate-400 mt-1 mb-4">Encontramos a capa oficial no iTunes em alta definição:</p>
         
-        <!-- Comparação lado a lado -->
-        <div class="grid grid-cols-2 gap-3 mb-5">
+        <div class="grid grid-cols-2 gap-3 mb-4">
           <div class="bg-slate-950 border border-slate-800 p-2.5 rounded-xl flex flex-col items-center">
             <span class="text-[10px] font-bold text-slate-400 uppercase mb-1.5">Original (SoundCloud)</span>
-            <img id="imgCapaOriginal" src="" class="w-28 h-28 object-cover rounded-lg border border-slate-800 mb-2">
+            <img id="imgCapaOriginal" src="" class="w-28 h-28 object-cover rounded-lg border border-slate-800 mb-1">
           </div>
           <div class="bg-slate-950 border border-emerald-500/40 p-2.5 rounded-xl flex flex-col items-center">
             <span class="text-[10px] font-bold text-emerald-400 uppercase mb-1.5">Oficial (iTunes HD)</span>
-            <img id="imgCapaItunes" src="" class="w-28 h-28 object-cover rounded-lg border border-emerald-500/30 mb-2">
+            <img id="imgCapaItunes" src="" class="w-28 h-28 object-cover rounded-lg border border-emerald-500/30 mb-1">
           </div>
         </div>
 
-        <p id="txtDetalhesItunes" class="text-[11px] text-slate-300 mb-5 line-clamp-1 italic bg-slate-950 py-1 px-2 rounded"></p>
+        <p id="txtDetalhesItunes" class="text-[11px] text-slate-300 mb-5 line-clamp-1 italic bg-slate-950 py-1.5 px-2 rounded border border-slate-800"></p>
 
-        <!-- Botões de Decisão -->
         <div class="grid grid-cols-2 gap-2.5">
           <button id="btnUsarOriginal" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-2.5 px-3 rounded-xl transition cursor-pointer">
             ❌ Manter Original
           </button>
           <button id="btnUsarItunes" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-3 rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer">
             ✅ Trocar p/ iTunes
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 2: Aviso quando NÃO acha no iTunes -->
+    <div id="modalSemItunes" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-amber-500/30 rounded-2xl max-w-md w-full p-5 shadow-2xl text-center">
+        <div class="w-10 h-10 bg-amber-500/20 text-amber-400 rounded-xl flex items-center justify-center mx-auto mb-2 text-xl border border-amber-500/30">⚠️</div>
+        <h3 class="font-bold text-sm text-white">Capa não encontrada no iTunes</h3>
+        <p class="text-xs text-slate-400 mt-1 mb-4">O iTunes não possui registro oficial para esta versão/remix.</p>
+        
+        <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl flex items-center gap-3.5 mb-4 text-left">
+          <img id="imgSemItunesCapa" src="" class="w-16 h-16 object-cover rounded-lg border border-slate-800 shrink-0">
+          <div class="min-w-0 flex-1">
+            <span class="text-[10px] font-bold text-orange-400 uppercase">Capa do SoundCloud</span>
+            <p id="txtSemItunesTitulo" class="text-xs font-bold text-white truncate mt-0.5"></p>
+            <p class="text-[11px] text-slate-400">A música será baixada com esta capa.</p>
+          </div>
+        </div>
+
+        <p class="text-xs text-slate-300 font-semibold mb-5">Deseja prosseguir com o download mesmo assim?</p>
+
+        <div class="grid grid-cols-2 gap-2.5">
+          <button id="btnCancelarDownload" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold py-2.5 px-3 rounded-xl transition cursor-pointer">
+            ❌ Cancelar
+          </button>
+          <button id="btnConfirmarDownloadOriginal" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-3 rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer">
+            ✅ Sim, Baixar
           </button>
         </div>
       </div>
@@ -333,9 +360,8 @@ HTML_PAGE = """<!DOCTYPE html>
     async function prepararDownload(url, titulo, artista, thumbOriginal, btn) {
       const originalText = btn.innerHTML;
       btn.disabled = true;
-      btn.innerHTML = "🎨 Verificando capa...";
+      btn.innerHTML = "🎨 Consultando iTunes...";
 
-      // Consulta se o iTunes tem capa para essa música
       const formData = new FormData();
       formData.append('titulo', titulo);
       formData.append('artista', artista);
@@ -345,15 +371,14 @@ HTML_PAGE = """<!DOCTYPE html>
         const data = await res.json();
 
         if (data.itunes) {
-          // Exibe o modal para o usuário escolher entre iTunes e Original
+          // Modal 1: Achou no iTunes -> Pergunta se quer trocar
           abrirModalCapa(url, titulo, thumbOriginal, data.itunes.capa, data.itunes.detalhes, btn, originalText);
         } else {
-          // Se não achou no iTunes, baixa direto com a capa original
-          executarDownload(url, titulo, thumbOriginal, btn, originalText);
+          // Modal 2: NÃO achou no iTunes -> Avisa e pergunta se quer baixar mesmo assim
+          abrirModalSemItunes(url, titulo, thumbOriginal, btn, originalText);
         }
       } catch (err) {
-        // Fallback: baixa com a original
-        executarDownload(url, titulo, thumbOriginal, btn, originalText);
+        abrirModalSemItunes(url, titulo, thumbOriginal, btn, originalText);
       }
     }
 
@@ -371,6 +396,25 @@ HTML_PAGE = """<!DOCTYPE html>
       document.getElementById('btnUsarItunes').onclick = () => {
         modal.classList.add('hidden');
         executarDownload(url, titulo, capaItunes, btn, originalBtnText);
+      };
+
+      modal.classList.remove('hidden');
+    }
+
+    function abrirModalSemItunes(url, titulo, capaOriginal, btn, originalBtnText) {
+      const modal = document.getElementById('modalSemItunes');
+      document.getElementById('imgSemItunesCapa').src = capaOriginal || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=80";
+      document.getElementById('txtSemItunesTitulo').innerText = titulo;
+
+      document.getElementById('btnCancelarDownload').onclick = () => {
+        modal.classList.add('hidden');
+        btn.innerHTML = originalBtnText;
+        btn.disabled = false;
+      };
+
+      document.getElementById('btnConfirmarDownloadOriginal').onclick = () => {
+        modal.classList.add('hidden');
+        executarDownload(url, titulo, capaOriginal, btn, originalBtnText);
       };
 
       modal.classList.remove('hidden');
@@ -534,7 +578,6 @@ async def buscar_faixas(query: str = Form(...)):
 
 @app.post("/api/consultar-capa")
 async def consultar_capa(titulo: str = Form(...), artista: str = Form("")):
-    """Busca se o iTunes tem capa oficial para esta música"""
     itunes_info = buscar_itunes_capa(titulo, artista)
     return {"itunes": itunes_info}
 
@@ -608,7 +651,6 @@ async def baixar_mp3(url: str = Form(...), capa_custom: str = Form(None)):
 
         corrigir_tags(arquivo_final)
         
-        # Se o usuário escolheu uma capa específica (iTunes ou Original selecionada), usa ela
         if capa_custom and capa_custom.startswith("http"):
             embutir_capa_url(arquivo_final, capa_custom)
         elif thumb:
