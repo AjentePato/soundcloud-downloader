@@ -39,11 +39,10 @@ DOMINIOS_PERMITIDOS = {
 
 os.makedirs(PASTA_MUSICAS, exist_ok=True)
 
-# Rate Limiter
 limiter = Limiter(key_func=get_remote_address)
 
 # ==============================================================================
-# FUNÇÕES AUXILIARES CORRIGIDAS
+# FUNÇÕES AUXILIARES
 # ==============================================================================
 STOP = {"the", "and", "for", "with", "official", "video", "lyric", "lyrics",
         "slowed", "reverb", "extended", "remix", "speed", "ultra", "super",
@@ -58,7 +57,6 @@ def limpar_ansi(texto):
     return re.sub(r"\x1b\[[0-9;]*m", "", texto)
 
 def limpar_titulo_para_busca(texto):
-    """Regex corrigida e segura"""
     if not texto:
         return ""
     t = re.sub(r"[\(\[\{][^\)\]\}]*[\)\]\}]", " ", texto)
@@ -89,7 +87,6 @@ def obter_og_image(url):
         return None
 
 def validar_url(url: str) -> bool:
-    """Segurança: Whitelist de domínios"""
     try:
         parsed = urllib.parse.urlparse(url)
         return parsed.netloc.lower() in DOMINIOS_PERMITIDOS
@@ -97,7 +94,7 @@ def validar_url(url: str) -> bool:
         return False
 
 # ==============================================================================
-# BUSCA DE LETRAS (COM LOGS)
+# BUSCA DE LETRAS
 # ==============================================================================
 def _buscar_lrclib(titulo, artista):
     try:
@@ -148,7 +145,6 @@ def buscar_letras_multi_fallback(titulo_raw, artista_raw=""):
         for fut in asyncio.as_completed(futuros):
             res = fut.result()
             if res:
-                # Cancela os restantes implicitamente ao retornar
                 return res
     return None
 
@@ -159,8 +155,7 @@ def embutir_capa_url(arquivo, url):
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=15) as r:
-            # Limita tamanho para evitar OOM
-            dados = r.read(5 * 1024 * 1024)  # Max 5MB
+            dados = r.read(5 * 1024 * 1024)
             mime = r.headers.get_content_type() or "image/jpeg"
         
         audio = MP3(arquivo)
@@ -255,7 +250,6 @@ def salvar_no_historico(titulo, artista, url):
         except Exception:
             historico = []
     
-    # Chaves SEM espaços extras
     historico.append({
         "titulo": titulo,
         "artista": artista,
@@ -269,7 +263,6 @@ def salvar_no_historico(titulo, artista, url):
 # LÓGICA DE DOWNLOAD BLOQUEANTE (RODA EM THREAD)
 # ==============================================================================
 def _download_sync(url, opts, download_id, baixados_list):
-    """Função síncrona que faz o trabalho pesado. Chamada via to_thread."""
     def hook(d):
         if d.get("status") == "downloading":
             try:
@@ -309,7 +302,7 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Em produção real, restrinja ao seu domínio
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -341,16 +334,13 @@ async def manifest():
 @app.post("/api/upload-cookies")
 @limiter.limit("10/minute")
 async def upload_cookies(request: Request, file: UploadFile = File(...)):
-    """Upload seguro de cookies.txt por usuário"""
     if not file.filename.endswith('.txt'):
         raise HTTPException(400, "Apenas arquivos .txt são aceitos")
     
     content = await file.read()
-    # Validação básica de formato Netscape
     if b"# Netscape HTTP Cookie File" not in content[:300] and b"httpOnly" not in content.lower():
-        raise HTTPException(400, "Arquivo de cookies inválido. Exporte usando extensão 'Get cookies.txt LOCALLY'.")
+        raise HTTPException(400, "Arquivo de cookies inválido. Use a extensão 'Get cookies.txt LOCALLY'.")
     
-    # Salva em temp dir com hash do IP para isolamento
     user_hash = hashlib.md5(request.client.host.encode()).hexdigest()[:10]
     cookie_path = os.path.join(tempfile.gettempdir(), f"yt_cookies_{user_hash}.txt")
     
@@ -375,7 +365,6 @@ async def buscar_faixas(request: Request, query: str = Form(...)):
         if not validar_url(query):
             raise HTTPException(400, "Domínio não suportado. Use SoundCloud ou YouTube.")
         try:
-            # Busca assíncrona de metadata
             info = await asyncio.to_thread(
                 lambda: yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}).extract_info(query, download=False)
             )
@@ -394,7 +383,6 @@ async def buscar_faixas(request: Request, query: str = Form(...)):
         except Exception as e:
             raise HTTPException(400, detail=f"Erro no link: {limpar_ansi(str(e))}")
 
-    # Busca textual apenas no SoundCloud (YouTube search requer API key ou cookies)
     try:
         info = await asyncio.to_thread(
             lambda: yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "extract_flat": True})
@@ -448,7 +436,7 @@ async def obter_stream(request: Request, url: str = Form(...)):
         raise HTTPException(400, detail=f"Erro ao obter prévia: {limpar_ansi(str(e))}")
 
 @app.post("/api/download")
-@limiter.limit("5/minute")  # Rate limit mais restritivo para downloads
+@limiter.limit("5/minute")
 async def baixar_mp3(
     request: Request,
     url: str = Form(...),
@@ -460,13 +448,12 @@ async def baixar_mp3(
     if not url or not validar_url(url):
         raise HTTPException(400, "URL inválida ou domínio não suportado.")
 
-    # Verifica se o cookie file existe e pertence ao usuário (básico)
     if cookie_file:
         user_hash = hashlib.md5(request.client.host.encode()).hexdigest()[:10]
         expected_path = os.path.join(tempfile.gettempdir(), f"yt_cookies_{user_hash}.txt")
         if cookie_file != expected_path or not os.path.exists(cookie_file):
             logger.warning(f"Tentativa de uso de cookie inválido por {request.client.host}")
-            cookie_file = None  # Fallback para download sem cookies
+            cookie_file = None
 
     baixados = []
     progresso_downloads[download_id] = {"pct": 10, "status": "Iniciando download da faixa..."}
@@ -485,9 +472,9 @@ async def baixar_mp3(
     
     if cookie_file:
         opts["cookiefile"] = cookie_file
+        logger.info(f"Iniciando download com cookies para {url}")
 
     try:
-        # EXECUÇÃO ASSÍNCRONA REAL DO YT-DLP
         info = await asyncio.to_thread(_download_sync, url, opts, download_id, baixados)
         
         titulo = info.get("title", "musica")
