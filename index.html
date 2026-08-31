@@ -4,26 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>SoundCloud & YouTube Downloader Pro</title>
-  
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#f97316">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="MP3 Pro">
-
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    body { font-family: 'Plus Jakarta Sans', sans-serif; -webkit-tap-highlight-color: transparent; }
+    body { font-family: 'Plus Jakarta Sans', sans-serif; -webkit-tap-highlight-color: transparent; background-color: #0b0f19; color: #f8fafc; }
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #090d16; }
     ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #334155; }
   </style>
 </head>
-<body class="bg-[#0b0f19] text-slate-100 min-h-screen flex flex-col items-center justify-start py-4 sm:py-10 px-3 sm:px-6 selection:bg-orange-500 selection:text-white">
+<body class="min-h-screen flex flex-col items-center justify-start py-4 sm:py-10 px-3 sm:px-6 selection:bg-orange-500 selection:text-white">
 
   <div class="w-full max-w-2xl bg-[#111726]/90 backdrop-blur-md border border-slate-800/80 rounded-2xl sm:rounded-3xl p-4 sm:p-7 shadow-2xl shadow-black/50">
     
@@ -32,14 +24,13 @@
         <div class="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-tr from-orange-600 to-amber-500 text-white rounded-xl sm:rounded-2xl flex items-center justify-center font-black text-xl sm:text-2xl shadow-lg shadow-orange-500/20 shrink-0">☁️</div>
         <div>
           <h1 class="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2">
-            SC / YT Downloader
-            <span class="text-[10px] font-extrabold uppercase bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full border border-orange-500/20">320kbps</span>
+            SC / YT Downloader <span class="text-[10px] font-extrabold uppercase bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full border border-orange-500/20">320kbps</span>
           </h1>
           <p class="text-[11px] sm:text-xs text-slate-400 font-medium">YouTube + SoundCloud • Cookies Seguros • MP3</p>
         </div>
       </div>
       <button onclick="carregarHistorico()" class="h-9 px-3 bg-slate-800/80 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white text-xs font-semibold rounded-xl border border-slate-700/80 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer shrink-0">
-        <span>🕒</span> <span class="hidden xs:inline">Histórico</span>
+        🕒 <span class="hidden xs:inline">Histórico</span>
       </button>
     </header>
 
@@ -47,10 +38,7 @@
       <div class="flex items-center justify-between gap-3 mb-2.5">
         <div class="flex items-center gap-2.5 min-w-0">
           <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-          <div class="min-w-0">
-            <p id="playerTitulo" class="text-xs font-bold text-white truncate"></p>
-            <p class="text-[10px] text-orange-400 font-medium">Ouvindo prévia</p>
-          </div>
+          <p id="playerTitulo" class="text-xs font-bold text-white truncate"></p>
         </div>
         <button onclick="fecharPlayer()" class="text-slate-400 hover:text-white text-xs px-2 py-1 bg-slate-800/80 rounded-lg transition">&times;</button>
       </div>
@@ -67,36 +55,30 @@
       </div>
       <div class="flex items-center justify-between text-[10px] text-slate-400">
         <span id="progressoStatus">Iniciando...</span>
-        <span class="text-emerald-400 font-mono">Multi-API Active</span>
       </div>
     </div>
 
     <div class="space-y-3 mb-5">
       <label class="block text-xs font-semibold text-slate-300 tracking-wide">Busque por nome ou cole o link (SoundCloud / YouTube):</label>
       <div class="flex flex-col sm:flex-row gap-2">
-        <input type="text" id="queryInput" placeholder="Ex: https://youtube.com/watch?v=... ou nome da música" 
+        <input type="text" id="queryInput" placeholder="Ex: https://youtube.com/watch?v=..." 
           onkeydown="if(event.key==='Enter') pesquisar()"
           class="flex-1 bg-[#080c14] border border-slate-700/80 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all" />
         <button id="btnBuscar" onclick="pesquisar()" 
           class="h-11 sm:h-auto bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 active:scale-[0.98] text-white font-bold text-xs sm:text-sm px-6 py-3 rounded-xl transition shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2 cursor-pointer shrink-0">
-          <span>🔍</span> Buscar
+          🔍 Buscar
         </button>
       </div>
 
       <div class="bg-[#080c14] border border-slate-800/80 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center gap-3">
         <div class="flex-1 min-w-0">
-          <label class="flex items-center gap-2 text-xs font-bold text-slate-300 cursor-pointer">
-            <span class="text-base">🍪</span> Cookies YouTube (Opcional)
-          </label>
-          <p class="text-[10px] text-slate-500 mt-0.5 leading-relaxed">Para vídeos privados/age-restricted. Desative o Brave Shields no YouTube antes de exportar.</p>
+          <label class="flex items-center gap-2 text-xs font-bold text-slate-300 cursor-pointer">🍪 Cookies YouTube (Opcional)</label>
+          <p class="text-[10px] text-slate-500 mt-0.5 leading-relaxed">Necessário para o YouTube no Render. Desative o Brave Shields antes de exportar.</p>
         </div>
         <div class="flex items-center gap-2 shrink-0">
           <input type="file" id="cookieFileInput" accept=".txt" class="hidden" onchange="handleCookieUpload(this)">
-          <button onclick="document.getElementById('cookieFileInput').click()" 
-            class="h-8 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold rounded-lg border border-slate-700 transition cursor-pointer whitespace-nowrap">
-            📂 Selecionar .txt
-          </button>
-          <span id="cookieStatus" class="text-[10px] font-bold text-slate-500"></span>
+          <button onclick="document.getElementById('cookieFileInput').click()" class="h-8 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold rounded-lg border border-slate-700 transition cursor-pointer whitespace-nowrap">📂 Selecionar .txt</button>
+          <span id="cookieStatus" class="text-[10px] font-bold text-slate-500 w-24 text-right"></span>
         </div>
       </div>
 
@@ -110,63 +92,44 @@
       </div>
     </div>
 
+    <!-- Modais -->
     <div id="modalCapa" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-[#111726] border border-slate-700 rounded-3xl max-w-sm sm:max-w-md w-full p-5 sm:p-6 shadow-2xl text-center animate-in fade-in zoom-in duration-200">
-        <div class="w-12 h-12 bg-blue-500/15 text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl border border-blue-500/20">🎨</div>
-        <h3 class="font-bold text-sm sm:text-base text-white">Trocar capa pela oficial HD?</h3>
-        <p class="text-xs text-slate-400 mt-1 mb-4">Encontramos a capa oficial no iTunes (600x600):</p>
+      <div class="bg-[#111726] border border-slate-700 rounded-3xl max-w-sm w-full p-5 shadow-2xl text-center">
+        <h3 class="font-bold text-sm text-white mb-4">Trocar capa pela oficial HD?</h3>
         <div class="grid grid-cols-2 gap-3 mb-4">
-          <div class="bg-[#080c14] border border-slate-800 p-2.5 rounded-2xl flex flex-col items-center">
-            <span class="text-[9px] font-bold text-slate-400 uppercase mb-2">Original</span>
-            <img id="imgCapaOriginal" src="" class="w-24 h-24 object-cover rounded-xl border border-slate-800 shadow-md">
-          </div>
-          <div class="bg-[#080c14] border border-emerald-500/40 p-2.5 rounded-2xl flex flex-col items-center">
-            <span class="text-[9px] font-bold text-emerald-400 uppercase mb-2">iTunes HD</span>
-            <img id="imgCapaItunes" src="" class="w-24 h-24 object-cover rounded-xl border border-emerald-500/30 shadow-md">
-          </div>
+          <img id="imgCapaOriginal" src="" class="w-24 h-24 object-cover rounded-xl border border-slate-800 mx-auto">
+          <img id="imgCapaItunes" src="" class="w-24 h-24 object-cover rounded-xl border border-emerald-500/30 mx-auto">
         </div>
-        <p id="txtDetalhesItunes" class="text-[11px] text-slate-300 mb-5 line-clamp-1 italic bg-[#080c14] py-2 px-3 rounded-xl border border-slate-800"></p>
+        <p id="txtDetalhesItunes" class="text-[11px] text-slate-300 mb-5 italic bg-[#080c14] py-2 px-3 rounded-xl"></p>
         <div class="grid grid-cols-2 gap-2.5">
-          <button id="btnUsarOriginal" class="h-11 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-bold rounded-xl transition cursor-pointer">❌ Manter</button>
-          <button id="btnUsarItunes" class="h-11 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer">✅ Usar HD</button>
+          <button id="btnUsarOriginal" class="h-10 bg-slate-800 text-slate-200 text-xs font-bold rounded-xl">❌ Manter</button>
+          <button id="btnUsarItunes" class="h-10 bg-emerald-600 text-white text-xs font-bold rounded-xl">✅ Usar HD</button>
         </div>
       </div>
     </div>
 
     <div id="modalSemItunes" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-[#111726] border border-amber-500/30 rounded-3xl max-w-sm sm:max-w-md w-full p-5 sm:p-6 shadow-2xl text-center animate-in fade-in zoom-in duration-200">
-        <div class="w-12 h-12 bg-amber-500/15 text-amber-400 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl border border-amber-500/20">⚠️</div>
-        <h3 class="font-bold text-sm sm:text-base text-white">Capa HD não encontrada</h3>
-        <p class="text-xs text-slate-400 mt-1 mb-4">Usaremos a capa original da plataforma.</p>
-        <div class="bg-[#080c14] border border-slate-800 p-3 rounded-2xl flex items-center gap-3.5 mb-4 text-left">
-          <img id="imgSemItunesCapa" src="" class="w-14 h-14 object-cover rounded-xl border border-slate-800 shrink-0">
-          <div class="min-w-0 flex-1">
-            <span class="text-[9px] font-bold text-orange-400 uppercase">Capa Original</span>
-            <p id="txtSemItunesTitulo" class="text-xs font-bold text-white truncate mt-0.5"></p>
-          </div>
-        </div>
+      <div class="bg-[#111726] border border-amber-500/30 rounded-3xl max-w-sm w-full p-5 shadow-2xl text-center">
+        <h3 class="font-bold text-sm text-white mb-4">Capa HD não encontrada</h3>
+        <p class="text-xs text-slate-400 mb-4">Usaremos a capa original.</p>
         <div class="grid grid-cols-2 gap-2.5">
-          <button id="btnCancelarDownload" class="h-11 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 text-xs font-bold rounded-xl transition cursor-pointer">❌ Cancelar</button>
-          <button id="btnConfirmarDownloadOriginal" class="h-11 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer">✅ Baixar Assim</button>
+          <button id="btnCancelarDownload" class="h-10 bg-slate-800 text-slate-300 text-xs font-bold rounded-xl">❌ Cancelar</button>
+          <button id="btnConfirmarDownloadOriginal" class="h-10 bg-emerald-600 text-white text-xs font-bold rounded-xl">✅ Baixar</button>
         </div>
       </div>
     </div>
 
     <div id="modalHistorico" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-[#111726] border border-slate-800 rounded-3xl max-w-lg w-full p-5 sm:p-6 max-h-[80vh] flex flex-col shadow-2xl">
+      <div class="bg-[#111726] border border-slate-800 rounded-3xl max-w-lg w-full p-5 max-h-[80vh] flex flex-col shadow-2xl">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
-          <h3 class="font-bold text-sm text-white flex items-center gap-2"><span>🕒</span> Histórico</h3>
-          <button onclick="document.getElementById('modalHistorico').classList.add('hidden')" class="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-lg cursor-pointer">&times;</button>
+          <h3 class="font-bold text-sm text-white">🕒 Histórico</h3>
+          <button onclick="document.getElementById('modalHistorico').classList.add('hidden')" class="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-lg">&times;</button>
         </div>
-        <div id="listaHistorico" class="overflow-y-auto space-y-2 flex-1 divide-y divide-slate-800/60 text-xs pr-1"></div>
+        <div id="listaHistorico" class="overflow-y-auto space-y-2 flex-1 text-xs pr-1"></div>
       </div>
     </div>
 
   </div>
-
-  <footer class="mt-6 text-center text-slate-500 text-xs font-medium">
-    SC/YT Downloader Pro • Cookies Temporários • Processamento Seguro
-  </footer>
 
   <script>
     const audioElement = document.getElementById('audioElement');
@@ -174,36 +137,26 @@
     const playerTitulo = document.getElementById('playerTitulo');
     let currentCookiePath = null;
 
-    function fecharPlayer() {
-      audioElement.pause();
-      audioElement.src = "";
-      playerBar.classList.add('hidden');
-    }
+    function fecharPlayer() { audioElement.pause(); audioElement.src = ""; playerBar.classList.add('hidden'); }
 
     async function handleCookieUpload(input) {
       const file = input.files[0];
       const status = document.getElementById('cookieStatus');
       if (!file) return;
-
       status.innerText = "⏳ Enviando...";
-      status.className = "text-[10px] font-bold text-amber-400";
+      status.className = "text-[10px] font-bold text-amber-400 w-24 text-right";
 
       const formData = new FormData();
       formData.append('file', file);
-
       try {
         const res = await fetch('/api/upload-cookies', { method: 'POST', body: formData });
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.detail || "Falha no upload");
-        }
-        const data = await res.json();
-        currentCookiePath = data.cookie_file;
-        status.innerText = "✅ Cookies ativos";
-        status.className = "text-[10px] font-bold text-emerald-400";
+        if (!res.ok) throw new Error((await res.json()).detail || "Falha");
+        currentCookiePath = (await res.json()).cookie_file;
+        status.innerText = "✅ Ativos";
+        status.className = "text-[10px] font-bold text-emerald-400 w-24 text-right";
       } catch (e) {
-        status.innerText = "❌ " + e.message;
-        status.className = "text-[10px] font-bold text-rose-400";
+        status.innerText = "❌ Erro";
+        status.className = "text-[10px] font-bold text-rose-400 w-24 text-right";
         currentCookiePath = null;
       }
       input.value = "";
@@ -214,149 +167,111 @@
       const status = document.getElementById('statusMsg');
       const btn = document.getElementById('btnBuscar');
       const container = document.getElementById('resultadosContainer');
-      const empty = document.getElementById('emptyState');
+      document.getElementById('emptyState')?.classList.add('hidden');
       
-      if (!query) {
-        status.className = "text-center text-xs font-semibold text-amber-400 bg-amber-500/10 py-2.5 rounded-xl block border border-amber-500/20";
-        status.innerText = "Digite um link ou nome de música.";
-        return;
-      }
-      
-      if (empty) empty.classList.add('hidden');
-      btn.disabled = true;
-      btn.innerHTML = "<span>⏳</span> Buscando...";
+      if (!query) return;
+      btn.disabled = true; btn.innerHTML = "⏳ Buscando...";
       status.className = "text-center text-xs font-semibold text-orange-400 bg-orange-500/10 py-2.5 rounded-xl block border border-orange-500/20 animate-pulse";
-      status.innerText = "Pesquisando faixas e carregando capas...";
+      status.innerText = "Pesquisando faixas (usando cookies se ativos)...";
       container.innerHTML = "";
 
       const formData = new FormData();
       formData.append('query', query);
+      if (currentCookiePath) formData.append('cookie_file', currentCookiePath); // MANDA COOKIE NA BUSCA
+
       try {
-        const response = await fetch('/api/buscar', { method: 'POST', body: formData });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Erro na busca.");
-        
-        if (data.resultados.length === 0) {
-          status.className = "text-center text-xs font-semibold text-slate-400 bg-slate-800/40 py-2.5 rounded-xl block border border-slate-700/60";
-          status.innerText = "Nenhum resultado encontrado.";
-          return;
-        }
+        const res = await fetch('/api/buscar', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail);
+        if (!data.resultados.length) throw new Error("Nenhum resultado.");
         
         status.classList.add('hidden');
         data.resultados.forEach(item => {
           const div = document.createElement('div');
-          const isCurto = item.segundos && item.segundos <= 45;
-          div.className = `flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#080c14] border ${isCurto ? 'border-rose-900/60' : 'border-slate-800/90'} p-3.5 rounded-2xl hover:border-slate-700/90 transition-all duration-200 shadow-sm`;
+          div.className = "flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#080c14] border border-slate-800/90 p-3.5 rounded-2xl shadow-sm";
           div.innerHTML = `
             <div class="flex items-center gap-3.5 min-w-0 flex-1">
-              ${item.thumb ? `<img src="${item.thumb}" class="w-14 h-14 rounded-xl object-cover border border-slate-800 shrink-0 shadow-md" alt="Capa">` : `<div class="w-14 h-14 bg-slate-800 rounded-xl flex items-center justify-center text-xl shrink-0 shadow-md">🎵</div>`}
+              ${item.thumb ? `<img src="${item.thumb}" class="w-14 h-14 rounded-xl object-cover border border-slate-800 shrink-0">` : `<div class="w-14 h-14 bg-slate-800 rounded-xl flex items-center justify-center text-xl shrink-0">🎵</div>`}
               <div class="min-w-0 flex-1">
-                <h4 class="text-xs sm:text-sm font-bold text-white truncate tracking-tight">${item.titulo}</h4>
-                <p class="text-[11px] text-slate-400 truncate mt-0.5 font-medium">${item.artista}</p>
-                <div class="flex items-center gap-2 mt-1.5 flex-wrap">
-                  ${item.duracao ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-800/90 text-slate-300 border border-slate-700/60">⏱ ${item.duracao}</span>` : ''}
-                  ${isCurto ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-rose-950/80 text-rose-300 border border-rose-800/80">⚠️ Trecho curto</span>` : ''}
-                </div>
+                <h4 class="text-xs sm:text-sm font-bold text-white truncate">${item.titulo}</h4>
+                <p class="text-[11px] text-slate-400 truncate mt-0.5">${item.artista}</p>
               </div>
             </div>
             <div class="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60 justify-end shrink-0">
-              <button onclick="ouvirPrevia('${item.url}', '${item.titulo.replace(/'/g, "\\'")}')" class="flex-1 sm:flex-initial h-10 px-3.5 bg-slate-800/90 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700/60">▶ Ouvir</button>
-              <button onclick="prepararDownload('${item.url}', '${item.titulo.replace(/'/g, "\\'")}', '${item.artista.replace(/'/g, "\\'")}', '${item.thumb || ''}', this)" class="flex-1 sm:flex-initial h-10 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/30 cursor-pointer">⬇ Baixar MP3</button>
-            </div>
-          `;
+              <button onclick="ouvirPrevia('${item.url}', '${item.titulo.replace(/'/g, "\\'")}')" class="h-10 px-3.5 bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl cursor-pointer">▶ Ouvir</button>
+              <button onclick="prepararDownload('${item.url}', '${item.titulo.replace(/'/g, "\\'")}', '${item.artista.replace(/'/g, "\\'")}', '${item.thumb || ''}', this)" class="h-10 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs font-bold rounded-xl cursor-pointer">⬇ Baixar</button>
+            </div>`;
           container.appendChild(div);
         });
       } catch (err) {
         status.className = "text-center text-xs font-semibold text-rose-400 bg-rose-500/10 py-2.5 rounded-xl block border border-rose-500/20";
         status.innerText = err.message;
       } finally {
-        btn.disabled = false;
-        btn.innerHTML = "<span>🔍</span> Buscar";
+        btn.disabled = false; btn.innerHTML = "🔍 Buscar";
       }
     }
 
     async function ouvirPrevia(url, titulo) {
       playerBar.classList.remove('hidden');
       playerTitulo.innerText = "Carregando: " + titulo;
-      audioElement.src = "";
       const formData = new FormData();
       formData.append('url', url);
+      if (currentCookiePath) formData.append('cookie_file', currentCookiePath); // MANDA COOKIE NO STREAM
       try {
-        const response = await fetch('/api/stream', { method: 'POST', body: formData });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Erro ao carregar áudio.");
+        const res = await fetch('/api/stream', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail);
         audioElement.src = data.stream_url;
         playerTitulo.innerText = titulo;
         audioElement.play();
-      } catch (err) {
-        alert("Erro: " + err.message);
-        playerBar.classList.add('hidden');
-      }
+      } catch (err) { alert("Erro: " + err.message); playerBar.classList.add('hidden'); }
     }
 
     async function prepararDownload(url, titulo, artista, thumbOriginal, btn) {
       const originalText = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = "<span>🎨</span> iTunes...";
+      btn.disabled = true; btn.innerHTML = "🎨 iTunes...";
       const formData = new FormData();
-      formData.append('titulo', titulo);
-      formData.append('artista', artista);
+      formData.append('titulo', titulo); formData.append('artista', artista);
       try {
         const res = await fetch('/api/consultar-capa', { method: 'POST', body: formData });
         const data = await res.json();
-        if (data.itunes) {
-          abrirModalCapa(url, titulo, thumbOriginal, data.itunes.capa, data.itunes.detalhes, btn, originalText);
-        } else {
-          abrirModalSemItunes(url, titulo, thumbOriginal, btn, originalText);
-        }
-      } catch (err) {
-        abrirModalSemItunes(url, titulo, thumbOriginal, btn, originalText);
-      }
+        if (data.itunes) abrirModalCapa(url, titulo, thumbOriginal, data.itunes.capa, data.itunes.detalhes, btn, originalText);
+        else abrirModalSemItunes(url, titulo, thumbOriginal, btn, originalText);
+      } catch (err) { abrirModalSemItunes(url, titulo, thumbOriginal, btn, originalText); }
     }
 
-    function abrirModalCapa(url, titulo, capaOriginal, capaItunes, detalhes, btn, originalBtnText) {
-      const modal = document.getElementById('modalCapa');
-      document.getElementById('imgCapaOriginal').src = capaOriginal || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=80";
+    function abrirModalCapa(url, titulo, capaOriginal, capaItunes, detalhes, btn, origTxt) {
+      document.getElementById('imgCapaOriginal').src = capaOriginal;
       document.getElementById('imgCapaItunes').src = capaItunes;
       document.getElementById('txtDetalhesItunes').innerText = detalhes;
-      document.getElementById('btnUsarOriginal').onclick = () => { modal.classList.add('hidden'); executarDownload(url, titulo, capaOriginal, btn, originalBtnText); };
-      document.getElementById('btnUsarItunes').onclick = () => { modal.classList.add('hidden'); executarDownload(url, titulo, capaItunes, btn, originalBtnText); };
-      modal.classList.remove('hidden');
+      document.getElementById('btnUsarOriginal').onclick = () => { document.getElementById('modalCapa').classList.add('hidden'); executarDownload(url, titulo, capaOriginal, btn, origTxt); };
+      document.getElementById('btnUsarItunes').onclick = () => { document.getElementById('modalCapa').classList.add('hidden'); executarDownload(url, titulo, capaItunes, btn, origTxt); };
+      document.getElementById('modalCapa').classList.remove('hidden');
     }
 
-    function abrirModalSemItunes(url, titulo, capaOriginal, btn, originalBtnText) {
-      const modal = document.getElementById('modalSemItunes');
-      document.getElementById('imgSemItunesCapa').src = capaOriginal || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=80";
-      document.getElementById('txtSemItunesTitulo').innerText = titulo;
-      document.getElementById('btnCancelarDownload').onclick = () => { modal.classList.add('hidden'); btn.innerHTML = originalBtnText; btn.disabled = false; };
-      document.getElementById('btnConfirmarDownloadOriginal').onclick = () => { modal.classList.add('hidden'); executarDownload(url, titulo, capaOriginal, btn, originalBtnText); };
-      modal.classList.remove('hidden');
+    function abrirModalSemItunes(url, titulo, capaOriginal, btn, origTxt) {
+      document.getElementById('btnCancelarDownload').onclick = () => { document.getElementById('modalSemItunes').classList.add('hidden'); btn.innerHTML = origTxt; btn.disabled = false; };
+      document.getElementById('btnConfirmarDownloadOriginal').onclick = () => { document.getElementById('modalSemItunes').classList.add('hidden'); executarDownload(url, titulo, capaOriginal, btn, origTxt); };
+      document.getElementById('modalSemItunes').classList.remove('hidden');
     }
 
     async function executarDownload(url, tituloOriginal, capaFinal, btn, originalText) {
-      btn.disabled = true;
-      btn.innerHTML = "<span>⏳</span> Baixando...";
+      btn.disabled = true; btn.innerHTML = "⏳ Baixando...";
       const pBox = document.getElementById('progressoDownloadBox');
-      const pTitulo = document.getElementById('progressoTitulo');
-      const pPct = document.getElementById('progressoPct');
-      const pBarra = document.getElementById('progressoBarra');
-      const pStatus = document.getElementById('progressoStatus');
-      
       pBox.classList.remove('hidden');
-      pTitulo.innerText = tituloOriginal;
-      pPct.innerText = "0%";
-      pBarra.style.width = "0%";
-      pStatus.innerText = "Iniciando download seguro...";
+      document.getElementById('progressoTitulo').innerText = tituloOriginal;
+      document.getElementById('progressoPct').innerText = "0%";
+      document.getElementById('progressoBarra').style.width = "0%";
 
       const downloadId = "dl_" + Date.now();
-      const timerProgresso = setInterval(async () => {
+      const timer = setInterval(async () => {
         try {
           const r = await fetch('/api/progresso/' + downloadId);
-          const pData = await r.json();
-          if (pData && pData.pct !== undefined) {
-            pPct.innerText = pData.pct + "%";
-            pBarra.style.width = pData.pct + "%";
-            if (pData.status) pStatus.innerText = pData.status;
+          const d = await r.json();
+          if (d.pct !== undefined) {
+            document.getElementById('progressoPct').innerText = d.pct + "%";
+            document.getElementById('progressoBarra').style.width = d.pct + "%";
+            if (d.status) document.getElementById('progressoStatus').innerText = d.status;
           }
         } catch (_) {}
       }, 500);
@@ -365,44 +280,27 @@
       formData.append('url', url);
       formData.append('download_id', downloadId);
       if (capaFinal) formData.append('capa_custom', capaFinal);
-      if (currentCookiePath) formData.append('cookie_file', currentCookiePath);
+      if (currentCookiePath) formData.append('cookie_file', currentCookiePath); // MANDA COOKIE NO DOWNLOAD
 
       try {
-        const response = await fetch('/api/download', { method: 'POST', body: formData });
-        clearInterval(timerProgresso);
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.detail || "Erro ao baixar.");
-        }
-        pPct.innerText = "100%";
-        pBarra.style.width = "100%";
-        pStatus.innerText = "✓ MP3 320kbps pronto!";
+        const res = await fetch('/api/download', { method: 'POST', body: formData });
+        clearInterval(timer);
+        if (!res.ok) throw new Error((await res.json()).detail);
+        
+        document.getElementById('progressoPct').innerText = "100%";
+        document.getElementById('progressoBarra').style.width = "100%";
+        document.getElementById('progressoStatus').innerText = "✓ Pronto!";
 
-        const disposition = response.headers.get('Content-Disposition');
-        let filename = tituloOriginal ? `${tituloOriginal}.mp3` : "musica.mp3";
-        if (disposition && disposition.indexOf('filename=') !== -1) {
-          const matches = disposition.match(/filename="?([^";]+)"?/);
-          if (matches && matches[1]) filename = decodeURIComponent(matches[1]);
-        }
-
-        const blob = await response.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
+        const blob = await res.blob();
         const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(downloadUrl);
+        a.href = window.URL.createObjectURL(blob);
+        a.download = tituloOriginal + ".mp3";
+        a.click(); a.remove();
 
-        btn.innerHTML = "<span>✓</span> Concluído!";
-        setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; pBox.classList.add('hidden'); }, 3500);
+        setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; pBox.classList.add('hidden'); }, 3000);
       } catch (err) {
-        clearInterval(timerProgresso);
-        alert("Erro: " + err.message);
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-        pBox.classList.add('hidden');
+        clearInterval(timer); alert("Erro: " + err.message);
+        btn.innerHTML = originalText; btn.disabled = false; pBox.classList.add('hidden');
       }
     }
 
@@ -410,30 +308,16 @@
       const modal = document.getElementById('modalHistorico');
       const lista = document.getElementById('listaHistorico');
       modal.classList.remove('hidden');
-      lista.innerHTML = "<p class='text-slate-400 py-6 text-center text-xs'>Carregando...</p>";
+      lista.innerHTML = "<p class='text-slate-400 py-6 text-center'>Carregando...</p>";
       try {
         const res = await fetch('/api/historico');
         const data = await res.json();
-        if (!data.historico || data.historico.length === 0) {
-          lista.innerHTML = "<p class='text-slate-400 py-6 text-center text-xs'>Nenhum download registrado.</p>";
-          return;
-        }
+        if (!data.historico.length) { lista.innerHTML = "<p class='text-slate-400 py-6 text-center'>Vazio.</p>"; return; }
         lista.innerHTML = "";
         data.historico.reverse().forEach(h => {
-          const item = document.createElement('div');
-          item.className = "py-2.5 flex items-center justify-between gap-3";
-          item.innerHTML = `
-            <div class="min-w-0 flex-1">
-              <p class="font-bold text-white truncate text-xs">${h.titulo}</p>
-              <p class="text-slate-400 text-[10px] truncate">${h.artista}</p>
-            </div>
-            <span class="text-[10px] text-slate-500 font-mono shrink-0">${h.data}</span>
-          `;
-          lista.appendChild(item);
+          lista.innerHTML += `<div class="py-2 border-b border-slate-800"><p class="font-bold text-white truncate">${h.titulo}</p><p class="text-slate-500 text-[10px]">${h.data}</p></div>`;
         });
-      } catch (err) {
-        lista.innerHTML = "<p class='text-rose-400 py-6 text-center text-xs'>Erro ao carregar.</p>";
-      }
+      } catch (e) { lista.innerHTML = "<p class='text-rose-400 py-6 text-center'>Erro.</p>"; }
     }
   </script>
 </body>
