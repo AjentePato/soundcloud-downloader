@@ -2,16 +2,17 @@ import os
 import re
 import glob
 import json
+import asyncio
 import urllib.request
 import urllib.parse
 import concurrent.futures
 from datetime import datetime
-from fastapi import FastAPI, Form, HTTPException
+from fastapi import FastAPI, Form, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import yt_dlp
 from mutagen.mp3 import MP3
-from mutagen.id3 import TIT2, TPE1, TALB, APIC
+from mutagen.id3 import TIT2, TPE1, TALB, APIC, USLT
 
 # Pastas universais
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -24,6 +25,9 @@ os.makedirs(PASTA_MUSICAS, exist_ok=True)
 STOP = {"the", "and", "for", "with", "official", "video", "lyric", "lyrics",
         "slowed", "reverb", "extended", "remix", "speed", "ultra", "super",
         "com", "sem", "pra", "pro", "uma", "não", "nao", "sped", "up", "edit"}
+
+# Gerenciador de progresso em tempo real
+progresso_downloads = {}
 
 def palavras(s):
     return {w for w in re.findall(r"[a-z0-9]{2,}", (s or "").lower())} - STOP
@@ -66,6 +70,23 @@ def obter_og_image(url):
     except Exception:
         return None
 
+def buscar_letras(titulo, artista=""):
+    """Busca letra da música usando a API gratuita LRCLIB"""
+    try:
+        tit = limpar_titulo_para_busca(titulo)
+        art = limpar_titulo_para_busca(artista) if artista and artista.lower() != "soundcloud" else ""
+        query = f"{art} {tit}".strip()
+        url = f"https://lrclib.net/api/search?q={urllib.parse.quote(query)}"
+        req = urllib.request.Request(url, headers={"User-Agent": "SoundCloudDownloader/1.0"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = json.load(r)
+            if data and isinstance(data, list) and len(data) > 0:
+                item = data[0]
+                return item.get("plainLyrics") or item.get("syncedLyrics")
+        return None
+    except Exception:
+        return None
+
 def embutir_capa_url(arquivo, url):
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -77,6 +98,20 @@ def embutir_capa_url(arquivo, url):
             audio.add_tags()
         audio.tags.delall("APIC")
         audio.tags.add(APIC(encoding=3, mime=mime, type=3, desc="Cover", data=dados))
+        audio.save()
+        return True
+    except Exception:
+        return False
+
+def embutir_letra(arquivo, letra_texto):
+    if not letra_texto:
+        return False
+    try:
+        audio = MP3(arquivo)
+        if audio.tags is None:
+            audio.add_tags()
+        audio.tags.delall("USLT")
+        audio.tags.add(USLT(encoding=3, lang="por", desc="Lyrics", text=letra_texto))
         audio.save()
         return True
     except Exception:
@@ -174,6 +209,14 @@ HTML_PAGE = """<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>SoundCloud Downloader Pro</title>
+  
+  <!-- PWA & Mobile Web App Capable -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#f97316">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SoundCloud MP3">
+
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -183,7 +226,6 @@ HTML_PAGE = """<!DOCTYPE html>
       font-family: 'Plus Jakarta Sans', sans-serif;
       -webkit-tap-highlight-color: transparent;
     }
-    /* Estilização da scrollbar */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #090d16; }
     ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
@@ -206,16 +248,21 @@ HTML_PAGE = """<!DOCTYPE html>
             SoundCloud Downloader
             <span class="text-[10px] font-extrabold uppercase bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full border border-orange-500/20">320kbps</span>
           </h1>
-          <p class="text-[11px] sm:text-xs text-slate-400 font-medium">MP3 de Alta Fidelidade • Capas Oficiais em HD</p>
+          <p class="text-[11px] sm:text-xs text-slate-400 font-medium">MP3 com Letras • Capas HD • Progresso em Tempo Real</p>
         </div>
       </div>
-      <button onclick="carregarHistorico()" class="h-9 px-3.5 bg-slate-800/80 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white text-xs font-semibold rounded-xl border border-slate-700/80 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer shrink-0">
-        <span>🕒</span>
-        <span class="hidden xs:inline sm:inline">Histórico</span>
-      </button>
+      <div class="flex items-center gap-2">
+        <button id="btnInstalarApp" class="hidden h-9 px-3 bg-orange-500/15 hover:bg-orange-500/25 active:scale-95 text-orange-400 text-xs font-semibold rounded-xl border border-orange-500/30 transition-all flex items-center gap-1.5 cursor-pointer">
+          <span>📲</span> Instalar App
+        </button>
+        <button onclick="carregarHistorico()" class="h-9 px-3 bg-slate-800/80 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white text-xs font-semibold rounded-xl border border-slate-700/80 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer shrink-0">
+          <span>🕒</span>
+          <span class="hidden xs:inline sm:inline">Histórico</span>
+        </button>
+      </div>
     </header>
 
-    <!-- Player de Áudio Flutuante / Compacto -->
+    <!-- Player de Áudio Flutuante -->
     <div id="playerBar" class="hidden mb-5 bg-[#080c14] border border-orange-500/30 rounded-2xl p-3.5 shadow-xl transition-all duration-300">
       <div class="flex items-center justify-between gap-3 mb-2.5">
         <div class="flex items-center gap-2.5 min-w-0">
@@ -230,7 +277,22 @@ HTML_PAGE = """<!DOCTYPE html>
       <audio id="audioElement" controls class="w-full h-8 rounded-lg accent-orange-500"></audio>
     </div>
 
-    <!-- Campo de Busca / URL -->
+    <!-- Barra de Progresso Real de Download -->
+    <div id="progressoDownloadBox" class="hidden mb-5 bg-[#080c14] border border-emerald-500/40 rounded-2xl p-4 shadow-xl">
+      <div class="flex items-center justify-between text-xs mb-2">
+        <span id="progressoTitulo" class="font-bold text-white truncate max-w-[70%]">Baixando música...</span>
+        <span id="progressoPct" class="font-bold text-emerald-400">0%</span>
+      </div>
+      <div class="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden mb-1.5">
+        <div id="progressoBarra" class="bg-gradient-to-r from-emerald-500 to-teal-400 h-2.5 rounded-full transition-all duration-200" style="width: 0%"></div>
+      </div>
+      <div class="flex items-center justify-between text-[10px] text-slate-400">
+        <span id="progressoStatus">Conectando ao SoundCloud...</span>
+        <span id="progressoDetalhe">Letras + Capa ID3</span>
+      </div>
+    </div>
+
+    <!-- Campo de Busca -->
     <div class="space-y-2 mb-5">
       <label class="block text-xs font-semibold text-slate-300 tracking-wide">Busque por nome da música ou cole o link:</label>
       <div class="flex flex-col sm:flex-row gap-2">
@@ -256,7 +318,6 @@ HTML_PAGE = """<!DOCTYPE html>
 
     <!-- Lista de Resultados -->
     <div id="resultadosContainer" class="space-y-2.5">
-      <!-- Mensagem padrão inicial -->
       <div id="emptyState" class="py-12 text-center text-slate-500">
         <div class="text-3xl mb-2">🎧</div>
         <p class="text-xs font-medium">Digite o nome de uma música ou link acima para começar</p>
@@ -344,6 +405,26 @@ HTML_PAGE = """<!DOCTYPE html>
     const audioElement = document.getElementById('audioElement');
     const playerBar = document.getElementById('playerBar');
     const playerTitulo = document.getElementById('playerTitulo');
+
+    // Prompt de Instalação PWA
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      const btn = document.getElementById('btnInstalarApp');
+      if (btn) btn.classList.remove('hidden');
+    });
+
+    document.getElementById('btnInstalarApp').addEventListener('click', async () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          document.getElementById('btnInstalarApp').classList.add('hidden');
+        }
+        deferredPrompt = null;
+      }
+    });
 
     function fecharPlayer() {
       audioElement.pause();
@@ -519,18 +600,53 @@ HTML_PAGE = """<!DOCTYPE html>
       btn.disabled = true;
       btn.innerHTML = "<span>⏳</span> Baixando...";
 
+      // Mostra a barra de progresso visual
+      const pBox = document.getElementById('progressoDownloadBox');
+      const pTitulo = document.getElementById('progressoTitulo');
+      const pPct = document.getElementById('progressoPct');
+      const pBarra = document.getElementById('progressoBarra');
+      const pStatus = document.getElementById('progressoStatus');
+      
+      pBox.classList.remove('hidden');
+      pTitulo.innerText = tituloOriginal;
+      pPct.innerText = "0%";
+      pBarra.style.width = "0%";
+      pStatus.innerText = "Iniciando download do stream...";
+
+      const downloadId = "dl_" + Date.now();
+
+      // Inicia monitoramento de progresso via polling rápido
+      const timerProgresso = setInterval(async () => {
+        try {
+          const r = await fetch('/api/progresso/' + downloadId);
+          const pData = await r.json();
+          if (pData && pData.pct !== undefined) {
+            pPct.innerText = pData.pct + "%";
+            pBarra.style.width = pData.pct + "%";
+            if (pData.status) pStatus.innerText = pData.status;
+          }
+        } catch (_) {}
+      }, 500);
+
       const formData = new FormData();
       formData.append('url', url);
+      formData.append('download_id', downloadId);
       if (capaFinal) {
         formData.append('capa_custom', capaFinal);
       }
 
       try {
         const response = await fetch('/api/download', { method: 'POST', body: formData });
+        clearInterval(timerProgresso);
+
         if (!response.ok) {
           const data = await response.json();
           throw new Error(data.detail || "Erro ao baixar.");
         }
+
+        pPct.innerText = "100%";
+        pBarra.style.width = "100%";
+        pStatus.innerText = "✓ Áudio convertido a 320kbps com Letras e Capa!";
 
         const disposition = response.headers.get('Content-Disposition');
         let filename = tituloOriginal ? `${tituloOriginal}.mp3` : "musica.mp3";
@@ -552,11 +668,17 @@ HTML_PAGE = """<!DOCTYPE html>
         window.URL.revokeObjectURL(downloadUrl);
 
         btn.innerHTML = "<span>✓</span> Concluído!";
-        setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 3000);
+        setTimeout(() => { 
+          btn.innerHTML = originalText; 
+          btn.disabled = false;
+          pBox.classList.add('hidden');
+        }, 3500);
       } catch (err) {
+        clearInterval(timerProgresso);
         alert("Erro no download: " + err.message);
         btn.innerHTML = originalText;
         btn.disabled = false;
+        pBox.classList.add('hidden');
       }
     }
 
@@ -605,9 +727,36 @@ app.add_middleware(
     expose_headers=["Content-Disposition"],
 )
 
+@app.get("/manifest.json")
+async def manifest():
+    return {
+        "name": "SoundCloud MP3 Downloader",
+        "short_name": "SoundCloud MP3",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#0b0f19",
+        "theme_color": "#f97316",
+        "icons": [
+            {
+                "src": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=192&auto=format&fit=crop&q=80",
+                "sizes": "192x192",
+                "type": "image/jpeg"
+            },
+            {
+                "src": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=512&auto=format&fit=crop&q=80",
+                "sizes": "512x512",
+                "type": "image/jpeg"
+            }
+        ]
+    }
+
 @app.get("/", response_class=HTMLResponse)
 async def index():
     return HTMLResponse(content=HTML_PAGE)
+
+@app.get("/api/progresso/{download_id}")
+async def obter_progresso(download_id: str):
+    return progresso_downloads.get(download_id, {"pct": 0, "status": "Iniciando..."})
 
 @app.post("/api/buscar")
 async def buscar_faixas(query: str = Form(...)):
@@ -703,14 +852,27 @@ async def obter_stream(url: str = Form(...)):
         raise HTTPException(status_code=400, detail=f"Erro ao obter prévia: {limpar_ansi(str(e))}")
 
 @app.post("/api/download")
-async def baixar_mp3(url: str = Form(...), capa_custom: str = Form(None)):
+async def baixar_mp3(url: str = Form(...), capa_custom: str = Form(None), download_id: str = Form("default")):
     url = url.strip()
     if not url:
         raise HTTPException(status_code=400, detail="URL inválida.")
 
     baixados = []
+    progresso_downloads[download_id] = {"pct": 10, "status": "Iniciando download da faixa..."}
+
     def hook(d):
-        if d.get("status") == "finished":
+        if d.get("status") == "downloading":
+            try:
+                p_str = d.get("_percent_str", "0").replace("%", "").strip()
+                p_val = int(float(p_str))
+                progresso_downloads[download_id] = {
+                    "pct": min(int(p_val * 0.8), 80),
+                    "status": f"Baixando stream: {p_str}%"
+                }
+            except Exception:
+                pass
+        elif d.get("status") == "finished":
+            progresso_downloads[download_id] = {"pct": 85, "status": "Convertendo áudio para MP3 320kbps..."}
             caminho = d.get("filepath") or d.get("filename")
             info = d.get("info_dict") or {}
             if caminho:
@@ -736,6 +898,8 @@ async def baixar_mp3(url: str = Form(...), capa_custom: str = Form(None)):
             artista = info.get("uploader", "")
             thumb = info.get("thumbnail") or obter_og_image(url)
 
+        progresso_downloads[download_id] = {"pct": 92, "status": "Buscando e embutindo Letras + Capa ID3..."}
+
         arquivo_final = None
         for arq, _, _, _ in baixados:
             if os.path.exists(arq):
@@ -750,16 +914,25 @@ async def baixar_mp3(url: str = Form(...), capa_custom: str = Form(None)):
         if not arquivo_final or not os.path.exists(arquivo_final):
             raise Exception("Não foi possível gerar o arquivo MP3.")
 
+        # 1. Tags básicas ID3
         corrigir_tags(arquivo_final)
         
+        # 2. Embutir Capa
         if capa_custom and capa_custom.startswith("http"):
             embutir_capa_url(arquivo_final, capa_custom)
         elif thumb:
             embutir_capa_url(arquivo_final, thumb)
 
+        # 3. Buscar e embutir Letras (Lyrics)
+        letras = buscar_letras(titulo, artista)
+        if letras:
+            embutir_letra(arquivo_final, letras)
+
         salvar_no_historico(titulo, artista, url)
         nome_download = f"{artista} - {titulo}.mp3" if artista else f"{titulo}.mp3"
         nome_limpo = re.sub(r'[\\/*?:"<>|]', "", nome_download)
+
+        progresso_downloads[download_id] = {"pct": 100, "status": "Download pronto!"}
 
         return FileResponse(
             path=arquivo_final,
@@ -768,6 +941,7 @@ async def baixar_mp3(url: str = Form(...), capa_custom: str = Form(None)):
             headers={"Content-Disposition": f'attachment; filename="{urllib.parse.quote(nome_limpo)}"'}
         )
     except Exception as e:
+        progresso_downloads[download_id] = {"pct": 0, "status": f"Erro: {str(e)}"}
         raise HTTPException(status_code=500, detail=f"Falha ao baixar: {limpar_ansi(str(e))}")
 
 @app.get("/api/historico")
