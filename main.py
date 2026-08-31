@@ -2,12 +2,11 @@ import os
 import re
 import glob
 import json
-import asyncio
 import urllib.request
 import urllib.parse
 import concurrent.futures
 from datetime import datetime
-from fastapi import FastAPI, Form, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import yt_dlp
@@ -26,7 +25,6 @@ STOP = {"the", "and", "for", "with", "official", "video", "lyric", "lyrics",
         "slowed", "reverb", "extended", "remix", "speed", "ultra", "super",
         "com", "sem", "pra", "pro", "uma", "não", "nao", "sped", "up", "edit"}
 
-# Gerenciador de progresso em tempo real
 progresso_downloads = {}
 
 def palavras(s):
@@ -38,7 +36,11 @@ def limpar_ansi(texto):
 def limpar_titulo_para_busca(texto):
     if not texto:
         return ""
+    # Remove conteúdos entre parênteses/colchetes
     t = re.sub(r"[\(\[\{][^\)\]\}]*[\)\]\}]", " ", texto)
+    # Remove termos comuns que atrapalham busca de letras
+    t = re.sub(r"(?i)\b(prod\.|prod|feat\.|feat|ft\.|ft|official|audio|video|lyric|lyrics|sped up|slowed|reverb)\b", " ", t)
+    # Remove pontuações e caracteres estranhos
     t = re.sub(r"[\^_\*~•★\-\|/\\:;<=>\?@#\$%&!\+\"]+", " ", t)
     return re.sub(r"\s+", " ", t).strip()
 
@@ -70,22 +72,86 @@ def obter_og_image(url):
     except Exception:
         return None
 
-def buscar_letras(titulo, artista=""):
-    """Busca letra da música usando a API gratuita LRCLIB"""
+# ==============================================================================
+# MOTOR DE BUSCA DE LETRAS MULTI-FALLBACK (LRCLIB + LyricsOVH + Vagalume)
+# ==============================================================================
+
+def _buscar_lrclib(titulo, artista):
     try:
-        tit = limpar_titulo_para_busca(titulo)
-        art = limpar_titulo_para_busca(artista) if artista and artista.lower() != "soundcloud" else ""
-        query = f"{art} {tit}".strip()
-        url = f"https://lrclib.net/api/search?q={urllib.parse.quote(query)}"
-        req = urllib.request.Request(url, headers={"User-Agent": "SoundCloudDownloader/1.0"})
-        with urllib.request.urlopen(req, timeout=5) as r:
+        q = f"{artista} {titulo}".strip() if artista else titulo
+        url = f"https://lrclib.net/api/search?q={urllib.parse.quote(q)}"
+        req = urllib.request.Request(url, headers={"User-Agent": "SoundCloudMP3/1.0"})
+        with urllib.request.urlopen(req, timeout=4) as r:
             data = json.load(r)
             if data and isinstance(data, list) and len(data) > 0:
-                item = data[0]
-                return item.get("plainLyrics") or item.get("syncedLyrics")
-        return None
+                letra = data[0].get("plainLyrics") or data[0].get("syncedLyrics")
+                if letra and len(letra.strip()) > 30:
+                    return letra.strip()
     except Exception:
-        return None
+        pass
+    return None
+
+def _buscar_lyricsovh(titulo, artista):
+    try:
+        if not artista or not titulo:
+            return None
+        url = f"https://api.lyrics.ovh/v1/{urllib.parse.quote(artista)}/{urllib.parse.quote(titulo)}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=4) as r:
+            data = json.load(r)
+            letra = data.get("lyrics")
+            if letra and len(letra.strip()) > 30:
+                return letra.strip()
+    except Exception:
+        pass
+    return None
+
+def _buscar_vagalume(titulo, artista):
+    try:
+        q = f"{artista} {titulo}".strip() if artista else titulo
+        url = f"https://api.vagalume.com.br/search.php?art={urllib.parse.quote(artista)}&mus={urllib.parse.quote(titulo)}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=4) as r:
+            data = json.load(r)
+            if data.get("type") in ("exact", "aprox"):
+                mus = data.get("mus", [])
+                if mus and len(mus) > 0:
+                    letra = mus[0].get("text")
+                    if letra and len(letra.strip()) > 30:
+                        return letra.strip()
+    except Exception:
+        pass
+    return None
+
+def buscar_letras_multi_fallback(titulo_raw, artista_raw=""):
+    """Executa múltiplos fallbacks em paralelo com variações de nomes"""
+    artista_sub, sep, titulo_sub = titulo_raw.partition(" - ")
+    if sep:
+        art = artista_sub
+        tit = titulo_sub
+    else:
+        art = artista_raw if artista_raw and artista_raw.lower() != "soundcloud" else ""
+        tit = titulo_raw
+
+    tit_limpo = limpar_titulo_para_busca(tit)
+    art_limpo = limpar_titulo_para_busca(art)
+
+    tarefas = [
+        lambda: _buscar_lrclib(tit_limpo, art_limpo),
+        lambda: _buscar_lyricsovh(tit_limpo, art_limpo),
+        lambda: _buscar_vagalume(tit_limpo, art_limpo),
+        lambda: _buscar_lrclib(tit_limpo, ""),
+    ]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        futuros = [executor.submit(fn) for fn in tarefas]
+        for fut in concurrent.futures.as_completed(futuros):
+            res = fut.result()
+            if res:
+                return res
+    return None
+
+# ==============================================================================
 
 def embutir_capa_url(arquivo, url):
     try:
@@ -111,7 +177,7 @@ def embutir_letra(arquivo, letra_texto):
         if audio.tags is None:
             audio.add_tags()
         audio.tags.delall("USLT")
-        audio.tags.add(USLT(encoding=3, lang="por", desc="Lyrics", text=letra_texto))
+        audio.tags.add(USLT(encoding=3, lang="XXX", desc="Lyrics", text=letra_texto))
         audio.save()
         return True
     except Exception:
@@ -210,7 +276,6 @@ HTML_PAGE = """<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>SoundCloud Downloader Pro</title>
   
-  <!-- PWA & Mobile Web App Capable -->
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#f97316">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -248,7 +313,7 @@ HTML_PAGE = """<!DOCTYPE html>
             SoundCloud Downloader
             <span class="text-[10px] font-extrabold uppercase bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full border border-orange-500/20">320kbps</span>
           </h1>
-          <p class="text-[11px] sm:text-xs text-slate-400 font-medium">MP3 com Letras • Capas HD • Progresso em Tempo Real</p>
+          <p class="text-[11px] sm:text-xs text-slate-400 font-medium">Letras Multi-Fonte • Capas Oficiais HD • MP3</p>
         </div>
       </div>
       <div class="flex items-center gap-2">
@@ -287,8 +352,8 @@ HTML_PAGE = """<!DOCTYPE html>
         <div id="progressoBarra" class="bg-gradient-to-r from-emerald-500 to-teal-400 h-2.5 rounded-full transition-all duration-200" style="width: 0%"></div>
       </div>
       <div class="flex items-center justify-between text-[10px] text-slate-400">
-        <span id="progressoStatus">Conectando ao SoundCloud...</span>
-        <span id="progressoDetalhe">Letras + Capa ID3</span>
+        <span id="progressoStatus">Buscando letras e stream...</span>
+        <span id="progressoDetalhe" class="text-emerald-400 font-mono">Multi-API Lyrics Active</span>
       </div>
     </div>
 
@@ -406,7 +471,6 @@ HTML_PAGE = """<!DOCTYPE html>
     const playerBar = document.getElementById('playerBar');
     const playerTitulo = document.getElementById('playerTitulo');
 
-    // Prompt de Instalação PWA
     let deferredPrompt;
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
@@ -600,7 +664,6 @@ HTML_PAGE = """<!DOCTYPE html>
       btn.disabled = true;
       btn.innerHTML = "<span>⏳</span> Baixando...";
 
-      // Mostra a barra de progresso visual
       const pBox = document.getElementById('progressoDownloadBox');
       const pTitulo = document.getElementById('progressoTitulo');
       const pPct = document.getElementById('progressoPct');
@@ -611,11 +674,10 @@ HTML_PAGE = """<!DOCTYPE html>
       pTitulo.innerText = tituloOriginal;
       pPct.innerText = "0%";
       pBarra.style.width = "0%";
-      pStatus.innerText = "Iniciando download do stream...";
+      pStatus.innerText = "Consultando bancos de letras e stream...";
 
       const downloadId = "dl_" + Date.now();
 
-      // Inicia monitoramento de progresso via polling rápido
       const timerProgresso = setInterval(async () => {
         try {
           const r = await fetch('/api/progresso/' + downloadId);
@@ -646,7 +708,7 @@ HTML_PAGE = """<!DOCTYPE html>
 
         pPct.innerText = "100%";
         pBarra.style.width = "100%";
-        pStatus.innerText = "✓ Áudio convertido a 320kbps com Letras e Capa!";
+        pStatus.innerText = "✓ MP3 320kbps pronto com Letras + Capa!";
 
         const disposition = response.headers.get('Content-Disposition');
         let filename = tituloOriginal ? `${tituloOriginal}.mp3` : "musica.mp3";
@@ -898,7 +960,7 @@ async def baixar_mp3(url: str = Form(...), capa_custom: str = Form(None), downlo
             artista = info.get("uploader", "")
             thumb = info.get("thumbnail") or obter_og_image(url)
 
-        progresso_downloads[download_id] = {"pct": 92, "status": "Buscando e embutindo Letras + Capa ID3..."}
+        progresso_downloads[download_id] = {"pct": 92, "status": "Consultando bases de letras e embutindo tags..."}
 
         arquivo_final = None
         for arq, _, _, _ in baixados:
@@ -923,8 +985,8 @@ async def baixar_mp3(url: str = Form(...), capa_custom: str = Form(None), downlo
         elif thumb:
             embutir_capa_url(arquivo_final, thumb)
 
-        # 3. Buscar e embutir Letras (Lyrics)
-        letras = buscar_letras(titulo, artista)
+        # 3. Buscar e embutir Letras (LRCLIB + Lyrics.ovh + Vagalume em paralelo)
+        letras = buscar_letras_multi_fallback(titulo, artista)
         if letras:
             embutir_letra(arquivo_final, letras)
 
