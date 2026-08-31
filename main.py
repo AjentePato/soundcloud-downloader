@@ -23,13 +23,25 @@ os.makedirs(PASTA_MUSICAS, exist_ok=True)
 
 STOP = {"the", "and", "for", "with", "official", "video", "lyric", "lyrics",
         "slowed", "reverb", "extended", "remix", "speed", "ultra", "super",
-        "com", "sem", "pra", "pro", "uma", "não", "nao"}
+        "com", "sem", "pra", "pro", "uma", "não", "nao", "sped", "up", "edit"}
 
 def palavras(s):
-    return {w for w in re.findall(r"[a-z0-9]{3,}", (s or "").lower())} - STOP
+    return {w for w in re.findall(r"[a-z0-9]{2,}", (s or "").lower())} - STOP
 
 def limpar_ansi(texto):
     return re.sub(r"\x1b\[[0-9;]*m", "", texto)
+
+def limpar_titulo_para_busca(texto):
+    """Remove emoticons, símbolos estranhos (^ _ ^, ★, etc.) e parênteses de produção"""
+    if not texto:
+        return ""
+    # Remove conteúdos entre parênteses ou colchetes tipo (prod. ...) ou [slowed]
+    t = re.sub(r"[\(\[\{][^\)\]\}]*[\)\]\}]", " ", texto)
+    # Remove emoticons e caracteres especiais comuns de títulos do SoundCloud
+    t = re.sub(r"[\^_\*~•★\-\|/\\:;<=>\?@#\$%&!\+\"]+", " ", t)
+    # Remove espaços duplicados
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
 
 def fmt_duracao(segundos):
     if segundos is None:
@@ -75,29 +87,60 @@ def embutir_capa_url(arquivo, url):
     except Exception:
         return False
 
-def buscar_itunes_capa(nome, artista=""):
+def buscar_itunes_capa(titulo_raw, artista_raw=""):
+    """Busca inteligente com fallback em 3 etapas e limpeza de caracteres especiais"""
     try:
-        nome_limpo = f"{artista} {nome}" if artista and artista != "SoundCloud" else nome
-        termo = urllib.parse.quote(nome_limpo.strip())
-        url_api = f"https://itunes.apple.com/search?term={termo}&media=music&entity=song&limit=5"
-        req = urllib.request.Request(url_api, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=8) as r:
-            data = json.load(r)
+        # Separa se vier no formato "Artista - Título"
+        artista_sub, sep, titulo_sub = titulo_raw.partition(" - ")
+        if sep:
+            artista_busca = artista_sub
+            titulo_busca = titulo_sub
+        else:
+            artista_busca = artista_raw if artista_raw and artista_raw.lower() != "soundcloud" else ""
+            titulo_busca = titulo_raw
+
+        tit_limpo = limpar_titulo_para_busca(titulo_busca)
+        art_limpo = limpar_titulo_para_busca(artista_busca)
+
+        # Lista de tentativas da mais específica para a mais ampla
+        tentativas = []
+        if art_limpo and tit_limpo:
+            tentativas.append(f"{art_limpo} {tit_limpo}")
+        if tit_limpo:
+            tentativas.append(tit_limpo)
         
-        qa = palavras(artista)
-        qt = palavras(nome)
-        
-        for res in data.get("results", []):
-            ra = palavras(res.get("artistName"))
-            rt = palavras(res.get("trackName"))
-            score = (len(qa & ra) + len(qt & rt)) if artista else len(qt & (ra | rt))
-            if score > 0:
-                art = res.get("artworkUrl100")
-                if art:
-                    return {
-                        "capa": art.replace("100x100bb", "600x600bb"),
-                        "detalhes": f"{res.get('artistName')} - {res.get('trackName')} ({res.get('collectionName', 'Single')})"
-                    }
+        # Pega as primeiras 3 palavras do título se for longo
+        palavras_tit = tit_limpo.split()
+        if len(palavras_tit) > 2:
+            tentativas.append(" ".join(palavras_tit[:3]))
+
+        for termo in tentativas:
+            if not termo or len(termo.strip()) < 2:
+                continue
+            
+            url_api = f"https://itunes.apple.com/search?term={urllib.parse.quote(termo.strip())}&media=music&entity=song&limit=8"
+            req = urllib.request.Request(url_api, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=6) as r:
+                data = json.load(r)
+
+            qa = palavras(art_limpo)
+            qt = palavras(tit_limpo)
+
+            for res in data.get("results", []):
+                ra = palavras(res.get("artistName", ""))
+                rt = palavras(res.get("trackName", ""))
+                
+                # Se bater pelo menos uma palavra relevante do título
+                score_tit = len(qt & rt)
+                score_art = len(qa & ra) if qa else 1
+
+                if score_tit > 0:
+                    art = res.get("artworkUrl100")
+                    if art:
+                        return {
+                            "capa": art.replace("100x100bb", "600x600bb"),
+                            "detalhes": f"{res.get('artistName')} - {res.get('trackName')} ({res.get('collectionName', 'Single')})"
+                        }
         return None
     except Exception:
         return None
@@ -156,7 +199,7 @@ HTML_PAGE = """<!DOCTYPE html>
         <div class="w-11 h-11 bg-orange-500/20 text-orange-400 rounded-xl flex items-center justify-center font-bold text-2xl border border-orange-500/30">☁️</div>
         <div>
           <h1 class="text-lg font-bold text-white tracking-tight">SoundCloud Downloader</h1>
-          <p class="text-[11px] text-slate-400 font-medium">MP3 320kbps • Capas Oficiais iTunes • Tags ID3</p>
+          <p class="text-[11px] text-slate-400 font-medium">MP3 320kbps • Busca Inteligente iTunes • Tags ID3</p>
         </div>
       </div>
       <button onclick="carregarHistorico()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition cursor-pointer">🕒 Histórico</button>
@@ -178,7 +221,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="space-y-2 mb-5">
       <label class="block text-xs font-semibold text-slate-300">Digite o nome da música ou cole o link do SoundCloud:</label>
       <div class="flex gap-2">
-        <input type="text" id="queryInput" placeholder="Ex: Misery ou https://soundcloud.com/..." onkeydown="if(event.key==='Enter') pesquisar()" class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500 transition-colors" />
+        <input type="text" id="queryInput" placeholder="Ex: kiss me again ou https://soundcloud.com/..." onkeydown="if(event.key==='Enter') pesquisar()" class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500 transition-colors" />
         <button id="btnBuscar" onclick="pesquisar()" class="bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs px-5 py-3 rounded-xl transition shadow-lg shadow-orange-500/20 flex items-center justify-center cursor-pointer shrink-0">🔍 Buscar</button>
       </div>
       <div id="statusMsg" class="hidden text-xs font-semibold py-1.5 text-center"></div>
@@ -371,10 +414,8 @@ HTML_PAGE = """<!DOCTYPE html>
         const data = await res.json();
 
         if (data.itunes) {
-          // Modal 1: Achou no iTunes -> Pergunta se quer trocar
           abrirModalCapa(url, titulo, thumbOriginal, data.itunes.capa, data.itunes.detalhes, btn, originalText);
         } else {
-          // Modal 2: NÃO achou no iTunes -> Avisa e pergunta se quer baixar mesmo assim
           abrirModalSemItunes(url, titulo, thumbOriginal, btn, originalText);
         }
       } catch (err) {
