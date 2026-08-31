@@ -32,16 +32,11 @@ def limpar_ansi(texto):
     return re.sub(r"\x1b\[[0-9;]*m", "", texto)
 
 def limpar_titulo_para_busca(texto):
-    """Remove emoticons, símbolos estranhos (^ _ ^, ★, etc.) e parênteses de produção"""
     if not texto:
         return ""
-    # Remove conteúdos entre parênteses ou colchetes tipo (prod. ...) ou [slowed]
     t = re.sub(r"[\(\[\{][^\)\]\}]*[\)\]\}]", " ", texto)
-    # Remove emoticons e caracteres especiais comuns de títulos do SoundCloud
     t = re.sub(r"[\^_\*~•★\-\|/\\:;<=>\?@#\$%&!\+\"]+", " ", t)
-    # Remove espaços duplicados
-    t = re.sub(r"\s+", " ", t).strip()
-    return t
+    return re.sub(r"\s+", " ", t).strip()
 
 def fmt_duracao(segundos):
     if segundos is None:
@@ -88,9 +83,7 @@ def embutir_capa_url(arquivo, url):
         return False
 
 def buscar_itunes_capa(titulo_raw, artista_raw=""):
-    """Busca inteligente com fallback em 3 etapas e limpeza de caracteres especiais"""
     try:
-        # Separa se vier no formato "Artista - Título"
         artista_sub, sep, titulo_sub = titulo_raw.partition(" - ")
         if sep:
             artista_busca = artista_sub
@@ -102,14 +95,12 @@ def buscar_itunes_capa(titulo_raw, artista_raw=""):
         tit_limpo = limpar_titulo_para_busca(titulo_busca)
         art_limpo = limpar_titulo_para_busca(artista_busca)
 
-        # Lista de tentativas da mais específica para a mais ampla
         tentativas = []
         if art_limpo and tit_limpo:
             tentativas.append(f"{art_limpo} {tit_limpo}")
         if tit_limpo:
             tentativas.append(tit_limpo)
         
-        # Pega as primeiras 3 palavras do título se for longo
         palavras_tit = tit_limpo.split()
         if len(palavras_tit) > 2:
             tentativas.append(" ".join(palavras_tit[:3]))
@@ -129,17 +120,14 @@ def buscar_itunes_capa(titulo_raw, artista_raw=""):
             for res in data.get("results", []):
                 ra = palavras(res.get("artistName", ""))
                 rt = palavras(res.get("trackName", ""))
-                
-                # Se bater pelo menos uma palavra relevante do título
                 score_tit = len(qt & rt)
-                score_art = len(qa & ra) if qa else 1
 
                 if score_tit > 0:
                     art = res.get("artworkUrl100")
                     if art:
                         return {
                             "capa": art.replace("100x100bb", "600x600bb"),
-                            "detalhes": f"{res.get('artistName')} - {res.get('trackName')} ({res.get('collectionName', 'Single')})"
+                            "detalhes": f"{res.get('artistName')} • {res.get('trackName')} ({res.get('collectionName', 'Single')})"
                         }
         return None
     except Exception:
@@ -184,77 +172,122 @@ HTML_PAGE = """<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SoundCloud Downloader Pro 320kbps</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SoundCloud Downloader Pro</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <style> body { font-family: 'Plus Jakarta Sans', sans-serif; } </style>
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* Estilização da scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #090d16; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+  </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center py-6 px-4">
-  <div class="w-full max-w-2xl bg-slate-900 border border-slate-800/80 rounded-2xl p-5 sm:p-7 shadow-2xl">
+<body class="bg-[#0b0f19] text-slate-100 min-h-screen flex flex-col items-center justify-start py-4 sm:py-10 px-3 sm:px-6 selection:bg-orange-500 selection:text-white">
+
+  <!-- Container Principal -->
+  <div class="w-full max-w-2xl bg-[#111726]/90 backdrop-blur-md border border-slate-800/80 rounded-2xl sm:rounded-3xl p-4 sm:p-7 shadow-2xl shadow-black/50">
     
-    <!-- Cabeçalho -->
-    <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-5">
+    <!-- Topo / Cabeçalho -->
+    <header class="flex items-center justify-between border-b border-slate-800/80 pb-4 mb-5">
       <div class="flex items-center gap-3">
-        <div class="w-11 h-11 bg-orange-500/20 text-orange-400 rounded-xl flex items-center justify-center font-bold text-2xl border border-orange-500/30">☁️</div>
+        <div class="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-tr from-orange-600 to-amber-500 text-white rounded-xl sm:rounded-2xl flex items-center justify-center font-black text-xl sm:text-2xl shadow-lg shadow-orange-500/20 shrink-0">
+          ☁️
+        </div>
         <div>
-          <h1 class="text-lg font-bold text-white tracking-tight">SoundCloud Downloader</h1>
-          <p class="text-[11px] text-slate-400 font-medium">MP3 320kbps • Busca Inteligente iTunes • Tags ID3</p>
+          <h1 class="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2">
+            SoundCloud Downloader
+            <span class="text-[10px] font-extrabold uppercase bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full border border-orange-500/20">320kbps</span>
+          </h1>
+          <p class="text-[11px] sm:text-xs text-slate-400 font-medium">MP3 de Alta Fidelidade • Capas Oficiais em HD</p>
         </div>
       </div>
-      <button onclick="carregarHistorico()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition cursor-pointer">🕒 Histórico</button>
-    </div>
+      <button onclick="carregarHistorico()" class="h-9 px-3.5 bg-slate-800/80 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white text-xs font-semibold rounded-xl border border-slate-700/80 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer shrink-0">
+        <span>🕒</span>
+        <span class="hidden xs:inline sm:inline">Histórico</span>
+      </button>
+    </header>
 
-    <!-- Barra de Player Ativo (Global) -->
-    <div id="playerBar" class="hidden mb-5 bg-slate-950 border border-orange-500/40 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
-      <div class="flex items-center gap-2.5 min-w-0">
-        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-        <div class="min-w-0">
-          <p id="playerTitulo" class="text-xs font-bold text-white truncate"></p>
-          <p class="text-[10px] text-orange-400">Reproduzindo prévia da música</p>
+    <!-- Player de Áudio Flutuante / Compacto -->
+    <div id="playerBar" class="hidden mb-5 bg-[#080c14] border border-orange-500/30 rounded-2xl p-3.5 shadow-xl transition-all duration-300">
+      <div class="flex items-center justify-between gap-3 mb-2.5">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+          <div class="min-w-0">
+            <p id="playerTitulo" class="text-xs font-bold text-white truncate"></p>
+            <p class="text-[10px] text-orange-400 font-medium">Ouvindo prévia da faixa</p>
+          </div>
         </div>
+        <button onclick="fecharPlayer()" class="text-slate-400 hover:text-white text-xs px-2 py-1 bg-slate-800/80 rounded-lg transition">&times; Fechar</button>
       </div>
-      <audio id="audioElement" controls class="h-8 max-w-xs w-full"></audio>
+      <audio id="audioElement" controls class="w-full h-8 rounded-lg accent-orange-500"></audio>
     </div>
 
-    <!-- Barra de Busca -->
+    <!-- Campo de Busca / URL -->
     <div class="space-y-2 mb-5">
-      <label class="block text-xs font-semibold text-slate-300">Digite o nome da música ou cole o link do SoundCloud:</label>
-      <div class="flex gap-2">
-        <input type="text" id="queryInput" placeholder="Ex: kiss me again ou https://soundcloud.com/..." onkeydown="if(event.key==='Enter') pesquisar()" class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500 transition-colors" />
-        <button id="btnBuscar" onclick="pesquisar()" class="bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs px-5 py-3 rounded-xl transition shadow-lg shadow-orange-500/20 flex items-center justify-center cursor-pointer shrink-0">🔍 Buscar</button>
+      <label class="block text-xs font-semibold text-slate-300 tracking-wide">Busque por nome da música ou cole o link:</label>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <div class="relative flex-1">
+          <input 
+            type="text" 
+            id="queryInput" 
+            placeholder="Ex: kiss me again ou https://soundcloud.com/..." 
+            onkeydown="if(event.key==='Enter') pesquisar()"
+            class="w-full bg-[#080c14] border border-slate-700/80 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all" 
+          />
+        </div>
+        <button 
+          id="btnBuscar" 
+          onclick="pesquisar()" 
+          class="h-11 sm:h-auto bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 active:scale-[0.98] text-white font-bold text-xs sm:text-sm px-6 py-3 rounded-xl transition shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2 cursor-pointer shrink-0"
+        >
+          <span>🔍</span> Buscar
+        </button>
       </div>
-      <div id="statusMsg" class="hidden text-xs font-semibold py-1.5 text-center"></div>
+      <div id="statusMsg" class="hidden text-xs font-semibold py-2 text-center rounded-xl"></div>
     </div>
 
     <!-- Lista de Resultados -->
-    <div id="resultadosContainer" class="space-y-2.5"></div>
+    <div id="resultadosContainer" class="space-y-2.5">
+      <!-- Mensagem padrão inicial -->
+      <div id="emptyState" class="py-12 text-center text-slate-500">
+        <div class="text-3xl mb-2">🎧</div>
+        <p class="text-xs font-medium">Digite o nome de uma música ou link acima para começar</p>
+      </div>
+    </div>
 
     <!-- Modal 1: Comparação de Capa (iTunes Encontrado) -->
-    <div id="modalCapa" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 shadow-2xl text-center">
-        <div class="w-10 h-10 bg-blue-500/20 text-blue-400 rounded-xl flex items-center justify-center mx-auto mb-2 text-xl border border-blue-500/30">🎨</div>
-        <h3 class="font-bold text-sm text-white">Deseja trocar a capa da música?</h3>
-        <p class="text-xs text-slate-400 mt-1 mb-4">Encontramos a capa oficial no iTunes em alta definição:</p>
+    <div id="modalCapa" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-[#111726] border border-slate-700 rounded-3xl max-w-sm sm:max-w-md w-full p-5 sm:p-6 shadow-2xl text-center animate-in fade-in zoom-in duration-200">
+        <div class="w-12 h-12 bg-blue-500/15 text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl border border-blue-500/20">🎨</div>
+        <h3 class="font-bold text-sm sm:text-base text-white">Deseja trocar a capa da música?</h3>
+        <p class="text-xs text-slate-400 mt-1 mb-4">Encontramos a capa oficial no iTunes em alta definição (600x600):</p>
         
         <div class="grid grid-cols-2 gap-3 mb-4">
-          <div class="bg-slate-950 border border-slate-800 p-2.5 rounded-xl flex flex-col items-center">
-            <span class="text-[10px] font-bold text-slate-400 uppercase mb-1.5">Original (SoundCloud)</span>
-            <img id="imgCapaOriginal" src="" class="w-28 h-28 object-cover rounded-lg border border-slate-800 mb-1">
+          <div class="bg-[#080c14] border border-slate-800 p-2.5 rounded-2xl flex flex-col items-center">
+            <span class="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Original SoundCloud</span>
+            <img id="imgCapaOriginal" src="" class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border border-slate-800 shadow-md">
           </div>
-          <div class="bg-slate-950 border border-emerald-500/40 p-2.5 rounded-xl flex flex-col items-center">
-            <span class="text-[10px] font-bold text-emerald-400 uppercase mb-1.5">Oficial (iTunes HD)</span>
-            <img id="imgCapaItunes" src="" class="w-28 h-28 object-cover rounded-lg border border-emerald-500/30 mb-1">
+          <div class="bg-[#080c14] border border-emerald-500/40 p-2.5 rounded-2xl flex flex-col items-center">
+            <span class="text-[9px] sm:text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-2">Oficial iTunes HD</span>
+            <img id="imgCapaItunes" src="" class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border border-emerald-500/30 shadow-md">
           </div>
         </div>
 
-        <p id="txtDetalhesItunes" class="text-[11px] text-slate-300 mb-5 line-clamp-1 italic bg-slate-950 py-1.5 px-2 rounded border border-slate-800"></p>
+        <p id="txtDetalhesItunes" class="text-[11px] text-slate-300 mb-5 line-clamp-1 italic bg-[#080c14] py-2 px-3 rounded-xl border border-slate-800"></p>
 
         <div class="grid grid-cols-2 gap-2.5">
-          <button id="btnUsarOriginal" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-2.5 px-3 rounded-xl transition cursor-pointer">
+          <button id="btnUsarOriginal" class="h-11 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-bold rounded-xl transition cursor-pointer">
             ❌ Manter Original
           </button>
-          <button id="btnUsarItunes" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-3 rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer">
+          <button id="btnUsarItunes" class="h-11 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer">
             ✅ Trocar p/ iTunes
           </button>
         </div>
@@ -262,28 +295,28 @@ HTML_PAGE = """<!DOCTYPE html>
     </div>
 
     <!-- Modal 2: Aviso quando NÃO acha no iTunes -->
-    <div id="modalSemItunes" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-slate-900 border border-amber-500/30 rounded-2xl max-w-md w-full p-5 shadow-2xl text-center">
-        <div class="w-10 h-10 bg-amber-500/20 text-amber-400 rounded-xl flex items-center justify-center mx-auto mb-2 text-xl border border-amber-500/30">⚠️</div>
-        <h3 class="font-bold text-sm text-white">Capa não encontrada no iTunes</h3>
+    <div id="modalSemItunes" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-[#111726] border border-amber-500/30 rounded-3xl max-w-sm sm:max-w-md w-full p-5 sm:p-6 shadow-2xl text-center animate-in fade-in zoom-in duration-200">
+        <div class="w-12 h-12 bg-amber-500/15 text-amber-400 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl border border-amber-500/20">⚠️</div>
+        <h3 class="font-bold text-sm sm:text-base text-white">Capa não encontrada no iTunes</h3>
         <p class="text-xs text-slate-400 mt-1 mb-4">O iTunes não possui registro oficial para esta versão/remix.</p>
         
-        <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl flex items-center gap-3.5 mb-4 text-left">
-          <img id="imgSemItunesCapa" src="" class="w-16 h-16 object-cover rounded-lg border border-slate-800 shrink-0">
+        <div class="bg-[#080c14] border border-slate-800 p-3 rounded-2xl flex items-center gap-3.5 mb-4 text-left">
+          <img id="imgSemItunesCapa" src="" class="w-14 h-14 sm:w-16 sm:h-16 object-cover rounded-xl border border-slate-800 shrink-0">
           <div class="min-w-0 flex-1">
-            <span class="text-[10px] font-bold text-orange-400 uppercase">Capa do SoundCloud</span>
+            <span class="text-[9px] font-bold text-orange-400 uppercase tracking-wider">Capa do SoundCloud</span>
             <p id="txtSemItunesTitulo" class="text-xs font-bold text-white truncate mt-0.5"></p>
-            <p class="text-[11px] text-slate-400">A música será baixada com esta capa.</p>
+            <p class="text-[11px] text-slate-400">A música será embutida com esta capa.</p>
           </div>
         </div>
 
         <p class="text-xs text-slate-300 font-semibold mb-5">Deseja prosseguir com o download mesmo assim?</p>
 
         <div class="grid grid-cols-2 gap-2.5">
-          <button id="btnCancelarDownload" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold py-2.5 px-3 rounded-xl transition cursor-pointer">
+          <button id="btnCancelarDownload" class="h-11 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 text-xs font-bold rounded-xl transition cursor-pointer">
             ❌ Cancelar
           </button>
-          <button id="btnConfirmarDownloadOriginal" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-3 rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer">
+          <button id="btnConfirmarDownloadOriginal" class="h-11 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer">
             ✅ Sim, Baixar
           </button>
         </div>
@@ -291,33 +324,51 @@ HTML_PAGE = """<!DOCTYPE html>
     </div>
 
     <!-- Modal de Histórico -->
-    <div id="modalHistorico" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-5 max-h-[80vh] flex flex-col">
+    <div id="modalHistorico" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-[#111726] border border-slate-800 rounded-3xl max-w-lg w-full p-5 sm:p-6 max-h-[80vh] flex flex-col shadow-2xl">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
-          <h3 class="font-bold text-sm text-white">Histórico de Downloads</h3>
-          <button onclick="document.getElementById('modalHistorico').classList.add('hidden')" class="text-slate-400 hover:text-white text-lg cursor-pointer">&times;</button>
+          <h3 class="font-bold text-sm text-white flex items-center gap-2"><span>🕒</span> Histórico de Downloads</h3>
+          <button onclick="document.getElementById('modalHistorico').classList.add('hidden')" class="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-lg cursor-pointer">&times;</button>
         </div>
-        <div id="listaHistorico" class="overflow-y-auto space-y-2 flex-1 divide-y divide-slate-800 text-xs"></div>
+        <div id="listaHistorico" class="overflow-y-auto space-y-2 flex-1 divide-y divide-slate-800/60 text-xs pr-1"></div>
       </div>
     </div>
+
   </div>
+
+  <footer class="mt-6 text-center text-slate-500 text-xs font-medium">
+    SoundCloud Downloader • Processamento Seguro na Nuvem
+  </footer>
 
   <script>
     const audioElement = document.getElementById('audioElement');
     const playerBar = document.getElementById('playerBar');
     const playerTitulo = document.getElementById('playerTitulo');
 
+    function fecharPlayer() {
+      audioElement.pause();
+      audioElement.src = "";
+      playerBar.classList.add('hidden');
+    }
+
     async function pesquisar() {
       const query = document.getElementById('queryInput').value.trim();
       const status = document.getElementById('statusMsg');
       const btn = document.getElementById('btnBuscar');
       const container = document.getElementById('resultadosContainer');
-      if (!query) { alert("Por favor, digite o nome ou link."); return; }
+      const empty = document.getElementById('emptyState');
       
+      if (!query) {
+        status.className = "text-center text-xs font-semibold text-amber-400 bg-amber-500/10 py-2.5 rounded-xl block border border-amber-500/20";
+        status.innerText = "Por favor, digite o nome de uma música ou cole o link.";
+        return;
+      }
+      
+      if (empty) empty.classList.add('hidden');
       btn.disabled = true;
-      btn.innerText = "Buscando...";
-      status.className = "text-center text-xs font-semibold text-orange-400 py-2 block";
-      status.innerText = "Pesquisando faixas, durações e capas...";
+      btn.innerHTML = "<span>⏳</span> Buscando...";
+      status.className = "text-center text-xs font-semibold text-orange-400 bg-orange-500/10 py-2.5 rounded-xl block border border-orange-500/20 animate-pulse";
+      status.innerText = "Pesquisando faixas e carregando capas em HD...";
       container.innerHTML = "";
 
       const formData = new FormData();
@@ -326,43 +377,46 @@ HTML_PAGE = """<!DOCTYPE html>
         const response = await fetch('/api/buscar', { method: 'POST', body: formData });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || "Erro na busca.");
+        
         if (data.resultados.length === 0) {
-          status.className = "text-center text-xs font-semibold text-slate-400 py-2 block";
-          status.innerText = "Nenhum resultado encontrado.";
+          status.className = "text-center text-xs font-semibold text-slate-400 bg-slate-800/40 py-2.5 rounded-xl block border border-slate-700/60";
+          status.innerText = "Nenhum resultado encontrado para esta busca.";
           return;
         }
+        
         status.classList.add('hidden');
         data.resultados.forEach(item => {
           const div = document.createElement('div');
           const isCurto = item.segundos && item.segundos <= 45;
 
-          div.className = `flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950 border ${isCurto ? 'border-rose-900/60' : 'border-slate-800/80'} p-3.5 rounded-xl hover:border-slate-700 transition`;
+          div.className = `flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#080c14] border ${isCurto ? 'border-rose-900/60' : 'border-slate-800/90'} p-3.5 rounded-2xl hover:border-slate-700/90 transition-all duration-200 shadow-sm`;
           div.innerHTML = `
-            <div class="flex items-center gap-3 min-w-0 flex-1">
-              ${item.thumb ? `<img src="${item.thumb}" class="w-14 h-14 rounded-lg object-cover border border-slate-800 shrink-0 shadow-sm" alt="Capa">` : `<div class="w-14 h-14 bg-slate-800 rounded-lg flex items-center justify-center text-lg shrink-0">🎵</div>`}
+            <div class="flex items-center gap-3.5 min-w-0 flex-1">
+              ${item.thumb ? `<img src="${item.thumb}" class="w-14 h-14 rounded-xl object-cover border border-slate-800 shrink-0 shadow-md" alt="Capa">` : `<div class="w-14 h-14 bg-slate-800 rounded-xl flex items-center justify-center text-xl shrink-0 shadow-md">🎵</div>`}
               <div class="min-w-0 flex-1">
-                <h4 class="text-xs font-bold text-white truncate">${item.titulo}</h4>
-                <p class="text-[11px] text-slate-400 truncate mt-0.5">${item.artista}</p>
+                <h4 class="text-xs sm:text-sm font-bold text-white truncate tracking-tight">${item.titulo}</h4>
+                <p class="text-[11px] text-slate-400 truncate mt-0.5 font-medium">${item.artista}</p>
                 
                 <div class="flex items-center gap-2 mt-1.5 flex-wrap">
                   ${item.duracao ? `
-                    <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                    <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-800/90 text-slate-300 border border-slate-700/60">
                       ⏱ ${item.duracao}
                     </span>
                   ` : ''}
                   ${isCurto ? `
-                    <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800">
-                      ⚠️ Prévia / Trecho curto (${item.duracao})
+                    <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-rose-950/80 text-rose-300 border border-rose-800/80">
+                      ⚠️ Trecho curto (${item.duracao})
                     </span>
                   ` : ''}
                 </div>
               </div>
             </div>
-            <div class="flex items-center gap-2 self-end sm:self-center shrink-0">
-              <button onclick="ouvirPrevia('${item.url}', '${item.titulo.replace(/'/g, "\\'")}')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-2 rounded-lg transition flex items-center gap-1 cursor-pointer">
+            
+            <div class="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60 justify-end shrink-0">
+              <button onclick="ouvirPrevia('${item.url}', '${item.titulo.replace(/'/g, "\\'")}')" class="flex-1 sm:flex-initial h-10 px-3.5 bg-slate-800/90 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700/60">
                 ▶ Ouvir
               </button>
-              <button onclick="prepararDownload('${item.url}', '${item.titulo.replace(/'/g, "\\'")}', '${item.artista.replace(/'/g, "\\'")}', '${item.thumb || ''}', this)" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg transition flex items-center gap-1.5 shadow-sm shadow-emerald-600/20 cursor-pointer">
+              <button onclick="prepararDownload('${item.url}', '${item.titulo.replace(/'/g, "\\'")}', '${item.artista.replace(/'/g, "\\'")}', '${item.thumb || ''}', this)" class="flex-1 sm:flex-initial h-10 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/30 cursor-pointer">
                 ⬇ Baixar MP3
               </button>
             </div>
@@ -370,11 +424,11 @@ HTML_PAGE = """<!DOCTYPE html>
           container.appendChild(div);
         });
       } catch (err) {
-        status.className = "text-center text-xs font-semibold text-rose-500 py-2 block";
+        status.className = "text-center text-xs font-semibold text-rose-400 bg-rose-500/10 py-2.5 rounded-xl block border border-rose-500/20";
         status.innerText = err.message;
       } finally {
         btn.disabled = false;
-        btn.innerText = "🔍 Buscar";
+        btn.innerHTML = "<span>🔍</span> Buscar";
       }
     }
 
@@ -403,7 +457,7 @@ HTML_PAGE = """<!DOCTYPE html>
     async function prepararDownload(url, titulo, artista, thumbOriginal, btn) {
       const originalText = btn.innerHTML;
       btn.disabled = true;
-      btn.innerHTML = "🎨 Consultando iTunes...";
+      btn.innerHTML = "<span>🎨</span> iTunes...";
 
       const formData = new FormData();
       formData.append('titulo', titulo);
@@ -463,7 +517,7 @@ HTML_PAGE = """<!DOCTYPE html>
 
     async function executarDownload(url, tituloOriginal, capaFinal, btn, originalText) {
       btn.disabled = true;
-      btn.innerHTML = "⏳ Baixando...";
+      btn.innerHTML = "<span>⏳</span> Baixando...";
 
       const formData = new FormData();
       formData.append('url', url);
@@ -497,7 +551,7 @@ HTML_PAGE = """<!DOCTYPE html>
         a.remove();
         window.URL.revokeObjectURL(downloadUrl);
 
-        btn.innerHTML = "✓ Concluído!";
+        btn.innerHTML = "<span>✓</span> Concluído!";
         setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 3000);
       } catch (err) {
         alert("Erro no download: " + err.message);
@@ -510,23 +564,29 @@ HTML_PAGE = """<!DOCTYPE html>
       const modal = document.getElementById('modalHistorico');
       const lista = document.getElementById('listaHistorico');
       modal.classList.remove('hidden');
-      lista.innerHTML = "<p class='text-slate-400 py-4 text-center'>Carregando...</p>";
+      lista.innerHTML = "<p class='text-slate-400 py-6 text-center text-xs'>Carregando registros...</p>";
       try {
         const res = await fetch('/api/historico');
         const data = await res.json();
         if (!data.historico || data.historico.length === 0) {
-          lista.innerHTML = "<p class='text-slate-400 py-4 text-center'>Nenhum download ainda.</p>";
+          lista.innerHTML = "<p class='text-slate-400 py-6 text-center text-xs'>Nenhum download registrado ainda.</p>";
           return;
         }
         lista.innerHTML = "";
         data.historico.reverse().forEach(h => {
           const item = document.createElement('div');
-          item.className = "py-2";
-          item.innerHTML = `<p class="font-bold text-white">${h.titulo}</p><p class="text-slate-400 text-[11px]">${h.artista} • ${h.data}</p>`;
+          item.className = "py-2.5 flex items-center justify-between gap-3";
+          item.innerHTML = `
+            <div class="min-w-0 flex-1">
+              <p class="font-bold text-white truncate text-xs">${h.titulo}</p>
+              <p class="text-slate-400 text-[10px] truncate">${h.artista}</p>
+            </div>
+            <span class="text-[10px] text-slate-500 font-mono shrink-0">${h.data}</span>
+          `;
           lista.appendChild(item);
         });
       } catch (err) {
-        lista.innerHTML = "<p class='text-rose-500 py-4 text-center'>Erro ao ler histórico.</p>";
+        lista.innerHTML = "<p class='text-rose-400 py-6 text-center text-xs'>Erro ao carregar histórico.</p>";
       }
     }
   </script>
