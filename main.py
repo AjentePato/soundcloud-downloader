@@ -38,7 +38,6 @@ DOMINIOS_PERMITIDOS = {
 }
 
 os.makedirs(PASTA_MUSICAS, exist_ok=True)
-
 limiter = Limiter(key_func=get_remote_address)
 
 # ==============================================================================
@@ -57,25 +56,21 @@ def limpar_ansi(texto):
     return re.sub(r"\x1b\[[0-9;]*m", "", texto)
 
 def limpar_titulo_para_busca(texto):
-    if not texto:
-        return ""
+    if not texto: return ""
     t = re.sub(r"[\(\[\{][^\)\]\}]*[\)\]\}]", " ", texto)
     t = re.sub(r"(?i)\b(prod\.|prod|feat\.|feat|ft\.|ft|official|audio|video|lyric|lyrics|sped up|slowed|reverb)\b", " ", t)
     t = re.sub(r"[^a-zA-Z0-9\s]", " ", t)
     return re.sub(r"\s+", " ", t).strip()
 
 def fmt_duracao(segundos):
-    if segundos is None:
-        return ""
+    if segundos is None: return ""
     try:
         seg = int(float(segundos))
         return f"{seg // 60}:{seg % 60:02d}"
-    except Exception:
-        return ""
+    except: return ""
 
 def obter_og_image(url):
-    if not url:
-        return None
+    if not url: return None
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=4) as r:
@@ -83,15 +78,50 @@ def obter_og_image(url):
         m = re.search(r'<meta\s+property="og:image"\s+content="([^"]+)"', html)
         return m.group(1) if m else None
     except Exception as e:
-        logger.warning(f"Falha ao obter og:image: {e}")
+        logger.warning(f"Falha og:image: {e}")
         return None
 
 def validar_url(url: str) -> bool:
     try:
-        parsed = urllib.parse.urlparse(url)
-        return parsed.netloc.lower() in DOMINIOS_PERMITIDOS
-    except Exception:
-        return False
+        return urllib.parse.urlparse(url).netloc.lower() in DOMINIOS_PERMITIDOS
+    except: return False
+
+def get_cookie_path(request: Request, cookie_file_form: str = None) -> str:
+    """Valida e retorna o caminho do cookie se for válido"""
+    if not cookie_file_form: return None
+    user_hash = hashlib.md5(request.client.host.encode()).hexdigest()[:10]
+    expected_path = os.path.join(tempfile.gettempdir(), f"yt_cookies_{user_hash}.txt")
+    if cookie_file_form == expected_path and os.path.exists(cookie_file_form):
+        return cookie_file_form
+    return None
+
+def get_ytdlp_opts(cookie_path: str = None, download: bool = False, progress_hook = None):
+    """Gera as opções do yt-dlp injetando o cookie se existir"""
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+    }
+    if cookie_path:
+        opts["cookiefile"] = cookie_path
+        logger.info(f"Usando cookies para requisição yt-dlp")
+        
+    if download:
+        opts.update({
+            "format": "bestaudio[protocol!^=m3u8]/bestaudio/best",
+            "outtmpl": os.path.join(PASTA_MUSICAS, "%(uploader)s - %(title)s.%(ext)s"),
+            "noplaylist": True,
+            "postprocessors": [
+                {'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': QUALIDADE_MP3},
+                {'key': 'FFmpegMetadata'},
+            ],
+        })
+        if progress_hook:
+            opts["progress_hooks"] = [progress_hook]
+    else:
+        # Opções para busca/stream
+        opts["extract_flat"] = False
+        
+    return opts
 
 # ==============================================================================
 # BUSCA DE LETRAS
@@ -105,32 +135,26 @@ def _buscar_lrclib(titulo, artista):
             data = json.load(r)
             if data and isinstance(data, list) and len(data) > 0:
                 letra = data[0].get("plainLyrics") or data[0].get("syncedLyrics")
-                if letra and len(letra.strip()) > 30:
-                    return letra.strip()
-    except Exception as e:
-        logger.warning(f"LRCLib falhou: {e}")
+                if letra and len(letra.strip()) > 30: return letra.strip()
+    except Exception as e: logger.warning(f"LRCLib falhou: {e}")
     return None
 
 def _buscar_lyricsovh(titulo, artista):
     try:
-        if not artista or not titulo:
-            return None
+        if not artista or not titulo: return None
         url = f"https://api.lyrics.ovh/v1/{urllib.parse.quote(artista)}/{urllib.parse.quote(titulo)}"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=4) as r:
             data = json.load(r)
             letra = data.get("lyrics")
-            if letra and len(letra.strip()) > 30:
-                return letra.strip()
-    except Exception as e:
-        logger.warning(f"LyricsOVH falhou: {e}")
+            if letra and len(letra.strip()) > 30: return letra.strip()
+    except Exception as e: logger.warning(f"LyricsOVH falhou: {e}")
     return None
 
 def buscar_letras_multi_fallback(titulo_raw, artista_raw=""):
     artista_sub, sep, titulo_sub = titulo_raw.partition(" - ")
     art = artista_sub if sep else (artista_raw if artista_raw.lower() != "soundcloud" else "")
     tit = titulo_sub if sep else titulo_raw
-
     tit_limpo = limpar_titulo_para_busca(tit)
     art_limpo = limpar_titulo_para_busca(art)
 
@@ -144,12 +168,11 @@ def buscar_letras_multi_fallback(titulo_raw, artista_raw=""):
         futuros = [executor.submit(fn) for fn in tarefas]
         for fut in asyncio.as_completed(futuros):
             res = fut.result()
-            if res:
-                return res
+            if res: return res
     return None
 
 # ==============================================================================
-# MANIPULAÇÃO DE MP3 E CAPAS
+# MANIPULAÇÃO DE MP3
 # ==============================================================================
 def embutir_capa_url(arquivo, url):
     try:
@@ -157,31 +180,27 @@ def embutir_capa_url(arquivo, url):
         with urllib.request.urlopen(req, timeout=15) as r:
             dados = r.read(5 * 1024 * 1024)
             mime = r.headers.get_content_type() or "image/jpeg"
-        
         audio = MP3(arquivo)
-        if audio.tags is None:
-            audio.add_tags()
+        if audio.tags is None: audio.add_tags()
         audio.tags.delall("APIC")
         audio.tags.add(APIC(encoding=3, mime=mime, type=3, desc="Cover", data=dados))
         audio.save()
         return True
     except Exception as e:
-        logger.warning(f"Falha ao embutir capa: {e}")
+        logger.warning(f"Falha capa: {e}")
         return False
 
 def embutir_letra(arquivo, letra_texto):
-    if not letra_texto:
-        return False
+    if not letra_texto: return False
     try:
         audio = MP3(arquivo)
-        if audio.tags is None:
-            audio.add_tags()
+        if audio.tags is None: audio.add_tags()
         audio.tags.delall("USLT")
         audio.tags.add(USLT(encoding=3, lang="XXX", desc="Lyrics", text=letra_texto))
         audio.save()
         return True
     except Exception as e:
-        logger.warning(f"Falha ao embutir letra: {e}")
+        logger.warning(f"Falha letra: {e}")
         return False
 
 def buscar_itunes_capa(titulo_raw, artista_raw=""):
@@ -189,78 +208,58 @@ def buscar_itunes_capa(titulo_raw, artista_raw=""):
         artista_sub, sep, titulo_sub = titulo_raw.partition(" - ")
         artista_busca = artista_sub if sep else (artista_raw if artista_raw.lower() != "soundcloud" else "")
         titulo_busca = titulo_sub if sep else titulo_raw
-
         tit_limpo = limpar_titulo_para_busca(titulo_busca)
         art_limpo = limpar_titulo_para_busca(artista_busca)
 
-        tentativas = []
-        if art_limpo and tit_limpo:
-            tentativas.append(f"{art_limpo} {tit_limpo}")
-        if tit_limpo:
-            tentativas.append(tit_limpo)
+        tentativas = [f"{art_limpo} {tit_limpo}"] if art_limpo and tit_limpo else []
+        if tit_limpo: tentativas.append(tit_limpo)
 
         for termo in tentativas:
-            if not termo or len(termo.strip()) < 2:
-                continue
+            if not termo or len(termo.strip()) < 2: continue
             url_api = f"https://itunes.apple.com/search?term={urllib.parse.quote(termo)}&media=music&entity=song&limit=5"
             req = urllib.request.Request(url_api, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=6) as r:
                 data = json.load(r)
-
             qt = palavras(tit_limpo)
             for res in data.get("results", []):
                 rt = palavras(res.get("trackName", ""))
                 if len(qt & rt) > 0:
                     art = res.get("artworkUrl100")
                     if art:
-                        return {
-                            "capa": art.replace("100x100bb", "600x600bb"),
-                            "detalhes": f"{res.get('artistName')} • {res.get('trackName')}"
-                        }
+                        return {"capa": art.replace("100x100bb", "600x600bb"), "detalhes": f"{res.get('artistName')} • {res.get('trackName')}"}
         return None
     except Exception as e:
-        logger.warning(f"iTunes search falhou: {e}")
+        logger.warning(f"iTunes falhou: {e}")
         return None
 
 def corrigir_tags(arquivo):
     nome = os.path.splitext(os.path.basename(arquivo))[0]
     artista, sep, titulo = nome.partition(" - ")
-    if not sep:
-        artista, titulo = "", nome
+    if not sep: artista, titulo = "", nome
     try:
         audio = MP3(arquivo)
-        if audio.tags is None:
-            audio.add_tags()
+        if audio.tags is None: audio.add_tags()
         audio['TIT2'] = TIT2(encoding=3, text=titulo)
         audio['TALB'] = TALB(encoding=3, text=titulo)
-        if artista:
-            audio['TPE1'] = TPE1(encoding=3, text=artista)
+        if artista: audio['TPE1'] = TPE1(encoding=3, text=artista)
         audio.save()
         return True
     except Exception as e:
-        logger.warning(f"Falha ao corrigir tags: {e}")
+        logger.warning(f"Falha tags: {e}")
         return False
 
 def salvar_no_historico(titulo, artista, url):
     historico = []
     if os.path.exists(ARQ_HISTORICO):
         try:
-            with open(ARQ_HISTORICO, "r", encoding="utf-8") as f:
-                historico = json.load(f)
-        except Exception:
-            historico = []
-    
-    historico.append({
-        "titulo": titulo,
-        "artista": artista,
-        "url": url,
-        "data": datetime.now().strftime("%d/%m/%Y %H:%M")
-    })
+            with open(ARQ_HISTORICO, "r", encoding="utf-8") as f: historico = json.load(f)
+        except: historico = []
+    historico.append({"titulo": titulo, "artista": artista, "url": url, "data": datetime.now().strftime("%d/%m/%Y %H:%M")})
     with open(ARQ_HISTORICO, "w", encoding="utf-8") as f:
         json.dump(historico[-100:], f, ensure_ascii=False, indent=2)
 
 # ==============================================================================
-# LÓGICA DE DOWNLOAD BLOQUEANTE (RODA EM THREAD)
+# LÓGICA DE DOWNLOAD BLOQUEANTE
 # ==============================================================================
 def _download_sync(url, opts, download_id, baixados_list):
     def hook(d):
@@ -268,23 +267,14 @@ def _download_sync(url, opts, download_id, baixados_list):
             try:
                 p_str = d.get("_percent_str", "0").replace("%", "").strip()
                 p_val = int(float(p_str))
-                progresso_downloads[download_id] = {
-                    "pct": min(int(p_val * 0.8), 80),
-                    "status": f"Baixando stream: {p_str}%"
-                }
-            except Exception:
-                pass
+                progresso_downloads[download_id] = {"pct": min(int(p_val * 0.8), 80), "status": f"Baixando stream: {p_str}%"}
+            except: pass
         elif d.get("status") == "finished":
             progresso_downloads[download_id] = {"pct": 85, "status": "Convertendo para MP3 320kbps..."}
             caminho = d.get("filepath") or d.get("filename")
             info = d.get("info_dict") or {}
             if caminho:
-                baixados_list.append((
-                    os.path.splitext(caminho)[0] + ".mp3",
-                    info.get("thumbnail"),
-                    info.get("title"),
-                    info.get("uploader")
-                ))
+                baixados_list.append((os.path.splitext(caminho)[0] + ".mp3", info.get("thumbnail"), info.get("title"), info.get("uploader")))
 
     opts["progress_hooks"] = [hook]
     with yt_dlp.YoutubeDL(opts) as ydl:
@@ -300,31 +290,19 @@ app.state.limiter = limiter
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     raise HTTPException(status_code=429, detail="Muitas requisições. Aguarde um momento.")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["Content-Disposition"],
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"], expose_headers=["Content-Disposition"])
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
     index_path = os.path.join(BASE_DIR, "index.html")
-    if not os.path.exists(index_path):
-        raise HTTPException(status_code=500, detail="index.html não encontrado.")
+    if not os.path.exists(index_path): raise HTTPException(status_code=500, detail="index.html não encontrado.")
     return FileResponse(index_path, media_type="text/html")
 
 @app.get("/manifest.json")
 async def manifest():
     return {
-        "name": "SC/YT MP3 Downloader",
-        "short_name": "MP3 Pro",
-        "start_url": "/",
-        "display": "standalone",
-        "background_color": "#0b0f19",
-        "theme_color": "#f97316",
+        "name": "SC/YT MP3 Downloader", "short_name": "MP3 Pro", "start_url": "/", "display": "standalone",
+        "background_color": "#0b0f19", "theme_color": "#f97316",
         "icons": [
             {"src": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=192&auto=format&fit=crop&q=80", "sizes": "192x192", "type": "image/jpeg"},
             {"src": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=512&auto=format&fit=crop&q=80", "sizes": "512x512", "type": "image/jpeg"}
@@ -334,18 +312,14 @@ async def manifest():
 @app.post("/api/upload-cookies")
 @limiter.limit("10/minute")
 async def upload_cookies(request: Request, file: UploadFile = File(...)):
-    if not file.filename.endswith('.txt'):
-        raise HTTPException(400, "Apenas arquivos .txt são aceitos")
-    
+    if not file.filename.endswith('.txt'): raise HTTPException(400, "Apenas arquivos .txt são aceitos")
     content = await file.read()
     if b"# Netscape HTTP Cookie File" not in content[:300] and b"httpOnly" not in content.lower():
         raise HTTPException(400, "Arquivo de cookies inválido. Use a extensão 'Get cookies.txt LOCALLY'.")
     
     user_hash = hashlib.md5(request.client.host.encode()).hexdigest()[:10]
     cookie_path = os.path.join(tempfile.gettempdir(), f"yt_cookies_{user_hash}.txt")
-    
-    with open(cookie_path, 'wb') as f:
-        f.write(content)
+    with open(cookie_path, 'wb') as f: f.write(content)
     
     logger.info(f"Cookies enviados por {request.client.host}")
     return {"cookie_file": cookie_path}
@@ -356,52 +330,32 @@ async def obter_progresso(download_id: str):
 
 @app.post("/api/buscar")
 @limiter.limit("30/minute")
-async def buscar_faixas(request: Request, query: str = Form(...)):
+async def buscar_faixas(request: Request, query: str = Form(...), cookie_file: str = Form(None)):
     query = query.strip()
-    if not query:
-        raise HTTPException(400, "Digite uma busca válida.")
+    if not query: raise HTTPException(400, "Digite uma busca válida.")
+    
+    cookie_path = get_cookie_path(request, cookie_file)
 
     if query.startswith("http"):
-        if not validar_url(query):
-            raise HTTPException(400, "Domínio não suportado. Use SoundCloud ou YouTube.")
+        if not validar_url(query): raise HTTPException(400, "Domínio não suportado. Use SoundCloud ou YouTube.")
         try:
-            info = await asyncio.to_thread(
-                lambda: yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}).extract_info(query, download=False)
-            )
+            opts = get_ytdlp_opts(cookie_path, download=False)
+            info = await asyncio.to_thread(lambda: yt_dlp.YoutubeDL(opts).extract_info(query, download=False))
             thumb = info.get("thumbnail") or obter_og_image(query)
             duracao_seg = info.get("duration")
-            return {
-                "resultados": [{
-                    "url": query,
-                    "titulo": info.get("title", "Sem título"),
-                    "artista": info.get("uploader", "Desconhecido"),
-                    "duracao": info.get("duration_string") or fmt_duracao(duracao_seg),
-                    "segundos": duracao_seg,
-                    "thumb": thumb
-                }]
-            }
+            return {"resultados": [{"url": query, "titulo": info.get("title", "Sem título"), "artista": info.get("uploader", "Desconhecido"), "duracao": info.get("duration_string") or fmt_duracao(duracao_seg), "segundos": duracao_seg, "thumb": thumb}]}
         except Exception as e:
             raise HTTPException(400, detail=f"Erro no link: {limpar_ansi(str(e))}")
 
     try:
-        info = await asyncio.to_thread(
-            lambda: yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "extract_flat": True})
-                         .extract_info(f"scsearch10:{query}", download=False)
-        )
+        opts = get_ytdlp_opts(cookie_path, download=False)
+        opts["extract_flat"] = True
+        info = await asyncio.to_thread(lambda: yt_dlp.YoutubeDL(opts).extract_info(f"scsearch10:{query}", download=False))
         entradas = info.get("entries") or []
         raw_resultados = []
-        
         for ent in entradas:
-            if not ent:
-                continue
-            raw_resultados.append({
-                "url": ent.get("webpage_url") or ent.get("url"),
-                "titulo": ent.get("title") or "Sem título",
-                "artista": ent.get("uploader") or "SoundCloud",
-                "duracao": ent.get("duration_string") or fmt_duracao(ent.get("duration")),
-                "segundos": ent.get("duration"),
-                "thumb": ent.get("thumbnail")
-            })
+            if not ent: continue
+            raw_resultados.append({"url": ent.get("webpage_url") or ent.get("url"), "titulo": ent.get("title") or "Sem título", "artista": ent.get("uploader") or "SoundCloud", "duracao": ent.get("duration_string") or fmt_duracao(ent.get("duration")), "segundos": ent.get("duration"), "thumb": ent.get("thumbnail")})
         return {"resultados": raw_resultados}
     except Exception as e:
         raise HTTPException(500, detail=f"Erro na busca: {limpar_ansi(str(e))}")
@@ -409,117 +363,63 @@ async def buscar_faixas(request: Request, query: str = Form(...)):
 @app.post("/api/consultar-capa")
 @limiter.limit("30/minute")
 async def consultar_capa(request: Request, titulo: str = Form(...), artista: str = Form("")):
-    itunes_info = buscar_itunes_capa(titulo, artista)
-    return {"itunes": itunes_info}
+    return {"itunes": buscar_itunes_capa(titulo, artista)}
 
 @app.post("/api/stream")
 @limiter.limit("20/minute")
-async def obter_stream(request: Request, url: str = Form(...)):
-    if not validar_url(url):
-        raise HTTPException(400, "Domínio não suportado.")
+async def obter_stream(request: Request, url: str = Form(...), cookie_file: str = Form(None)):
+    if not validar_url(url): raise HTTPException(400, "Domínio não suportado.")
+    cookie_path = get_cookie_path(request, cookie_file)
     try:
-        info = await asyncio.to_thread(
-            lambda: yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "format": "bestaudio"})
-                         .extract_info(url, download=False)
-        )
-        stream_url = None
-        for f in info.get("formats", []):
-            if f.get("protocol", "").startswith("http") and f.get("ext") in ("mp3", "m4a", "aac"):
-                stream_url = f.get("url")
-                break
-        if not stream_url:
-            stream_url = info.get("url")
-        if not stream_url:
-            raise Exception("Fluxo de áudio não encontrado.")
+        opts = get_ytdlp_opts(cookie_path, download=False)
+        opts["format"] = "bestaudio"
+        info = await asyncio.to_thread(lambda: yt_dlp.YoutubeDL(opts).extract_info(url, download=False))
+        stream_url = next((f.get("url") for f in info.get("formats", []) if f.get("protocol", "").startswith("http") and f.get("ext") in ("mp3", "m4a", "aac")), info.get("url"))
+        if not stream_url: raise Exception("Fluxo de áudio não encontrado.")
         return {"stream_url": stream_url}
     except Exception as e:
         raise HTTPException(400, detail=f"Erro ao obter prévia: {limpar_ansi(str(e))}")
 
 @app.post("/api/download")
 @limiter.limit("5/minute")
-async def baixar_mp3(
-    request: Request,
-    url: str = Form(...),
-    capa_custom: str = Form(None),
-    download_id: str = Form("default"),
-    cookie_file: str = Form(None)
-):
+async def baixar_mp3(request: Request, url: str = Form(...), capa_custom: str = Form(None), download_id: str = Form("default"), cookie_file: str = Form(None)):
     url = url.strip()
-    if not url or not validar_url(url):
-        raise HTTPException(400, "URL inválida ou domínio não suportado.")
-
-    if cookie_file:
-        user_hash = hashlib.md5(request.client.host.encode()).hexdigest()[:10]
-        expected_path = os.path.join(tempfile.gettempdir(), f"yt_cookies_{user_hash}.txt")
-        if cookie_file != expected_path or not os.path.exists(cookie_file):
-            logger.warning(f"Tentativa de uso de cookie inválido por {request.client.host}")
-            cookie_file = None
-
+    if not url or not validar_url(url): raise HTTPException(400, "URL inválida ou domínio não suportado.")
+    
+    cookie_path = get_cookie_path(request, cookie_file)
     baixados = []
     progresso_downloads[download_id] = {"pct": 10, "status": "Iniciando download da faixa..."}
-
-    opts = {
-        "format": "bestaudio[protocol!^=m3u8]/bestaudio/best",
-        "outtmpl": os.path.join(PASTA_MUSICAS, "%(uploader)s - %(title)s.%(ext)s"),
-        "noplaylist": True,
-        "postprocessors": [
-            {'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': QUALIDADE_MP3},
-            {'key': 'FFmpegMetadata'},
-        ],
-        "quiet": True,
-        "no_warnings": True,
-    }
     
-    if cookie_file:
-        opts["cookiefile"] = cookie_file
-        logger.info(f"Iniciando download com cookies para {url}")
+    opts = get_ytdlp_opts(cookie_path, download=True)
 
     try:
         info = await asyncio.to_thread(_download_sync, url, opts, download_id, baixados)
-        
         titulo = info.get("title", "musica")
         artista = info.get("uploader", "")
         thumb = info.get("thumbnail") or obter_og_image(url)
 
         progresso_downloads[download_id] = {"pct": 92, "status": "Embutindo tags e letras..."}
-
-        arquivo_final = None
-        for arq, _, _, _ in baixados:
-            if os.path.exists(arq):
-                arquivo_final = arq
-                break
+        arquivo_final = next((arq for arq, _, _, _ in baixados if os.path.exists(arq)), None)
 
         if not arquivo_final:
             arquivos = glob.glob(os.path.join(PASTA_MUSICAS, f"*{titulo[:15]}*.mp3"))
-            if arquivos:
-                arquivo_final = arquivos[0]
+            if arquivos: arquivo_final = arquivos[0]
 
-        if not arquivo_final or not os.path.exists(arquivo_final):
-            raise Exception("Não foi possível gerar o arquivo MP3.")
+        if not arquivo_final or not os.path.exists(arquivo_final): raise Exception("Não foi possível gerar o arquivo MP3.")
 
         corrigir_tags(arquivo_final)
-
-        if capa_custom and capa_custom.startswith("http"):
-            embutir_capa_url(arquivo_final, capa_custom)
-        elif thumb:
-            embutir_capa_url(arquivo_final, thumb)
+        if capa_custom and capa_custom.startswith("http"): embutir_capa_url(arquivo_final, capa_custom)
+        elif thumb: embutir_capa_url(arquivo_final, thumb)
 
         letras = buscar_letras_multi_fallback(titulo, artista)
-        if letras:
-            embutir_letra(arquivo_final, letras)
+        if letras: embutir_letra(arquivo_final, letras)
 
         salvar_no_historico(titulo, artista, url)
         nome_download = f"{artista} - {titulo}.mp3" if artista else f"{titulo}.mp3"
         nome_limpo = re.sub(r'[\\/*?:"<>|]', "", nome_download)
 
         progresso_downloads[download_id] = {"pct": 100, "status": "Download pronto!"}
-
-        return FileResponse(
-            path=arquivo_final,
-            filename=nome_limpo,
-            media_type="audio/mpeg",
-            headers={"Content-Disposition": f'attachment; filename="{urllib.parse.quote(nome_limpo)}"'}
-        )
+        return FileResponse(path=arquivo_final, filename=nome_limpo, media_type="audio/mpeg", headers={"Content-Disposition": f'attachment; filename="{urllib.parse.quote(nome_limpo)}"'})
     except Exception as e:
         logger.error(f"Falha no download {download_id}: {e}")
         progresso_downloads[download_id] = {"pct": 0, "status": f"Erro: {str(e)}"}
@@ -529,8 +429,6 @@ async def baixar_mp3(
 async def obter_historico():
     if os.path.exists(ARQ_HISTORICO):
         try:
-            with open(ARQ_HISTORICO, "r", encoding="utf-8") as f:
-                return {"historico": json.load(f)}
-        except Exception:
-            return {"historico": []}
+            with open(ARQ_HISTORICO, "r", encoding="utf-8") as f: return {"historico": json.load(f)}
+        except: return {"historico": []}
     return {"historico": []}
