@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YT/SC Downloader Pro</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>body{background-color:#0b0f19;color:white;font-family:sans-serif;}</style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+<div class="w-full max-w-xl bg-[#111726] border border-slate-800 rounded-2xl p-6 shadow-2xl">
+  <h1 class="text-2xl font-bold mb-1">☁️ SC / YT Downloader</h1>
+  <p class="text-slate-400 text-sm mb-6">YouTube + SoundCloud • Cookies Seguros • MP3 320kbps</p>
+
+  <div class="space-y-4">
+    <div>
+      <label class="block text-xs font-bold text-slate-400 mb-1">LINK DO VÍDEO / MÚSICA</label>
+      <input type="text" id="urlInput" placeholder="https://youtube.com/watch?v=..." class="w-full bg-[#080c14] border border-slate-700 rounded-lg px-4 py-3 text-sm focus:border-orange-500 outline-none">
+    </div>
+
+    <div class="bg-[#080c14] border border-slate-800 rounded-lg p-3">
+      <div class="flex items-center justify-between">
+        <p class="text-xs font-bold text-slate-300">🍪 Cookies YouTube (Opcional)</p>
+        <div class="flex items-center gap-2">
+          <input type="file" id="cookieInput" accept=".txt" class="hidden">
+          <button onclick="document.getElementById('cookieInput').click()" class="bg-slate-800 hover:bg-slate-700 text-xs font-bold py-2 px-3 rounded-lg cursor-pointer">📂 .txt</button>
+        </div>
+      </div>
+      <p id="cookieLabel" class="text-[10px] text-slate-500 mt-1">Nenhum arquivo selecionado. O cookie é enviado junto com o download.</p>
+    </div>
+
+    <button onclick="iniciarBusca()" id="btnBuscar" class="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:opacity-90 text-white font-bold py-3 rounded-lg shadow-lg shadow-orange-500/20 cursor-pointer">🔍 BUSCAR E BAIXAR</button>
+  </div>
+
+  <div id="progressArea" class="hidden mt-6 bg-[#080c14] border border-emerald-500/30 rounded-lg p-4">
+    <div class="flex justify-between text-xs mb-2">
+      <span id="progText" class="font-bold truncate pr-2">Iniciando...</span>
+      <span id="progPct" class="font-bold text-emerald-400">0%</span>
+    </div>
+    <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+      <div id="progBar" class="bg-emerald-500 h-2 rounded-full transition-all duration-300" style="width:0%"></div>
+    </div>
+  </div>
+
+  <div id="resultArea" class="hidden mt-6 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-center">
+    <p class="text-emerald-400 font-bold mb-1">✅ Download Concluído!</p>
+    <p class="text-xs text-slate-400">O MP3 deve começar a baixar automaticamente.</p>
+  </div>
+
+  <div id="errorArea" class="hidden mt-6 p-4 bg-rose-500/10 border border-rose-500/30 rounded-lg">
+    <p class="text-rose-400 font-bold text-sm mb-1">❌ Erro no Processo</p>
+    <p id="errorMsg" class="text-xs text-rose-300/80 break-words"></p>
+  </div>
+</div>
+
+<script>
+var cookieFileObj = null;
+
+document.getElementById('cookieInput').addEventListener('change', function() {
+  var f = this.files[0];
+  var label = document.getElementById('cookieLabel');
+  if (f) {
+    cookieFileObj = f;
+    label.innerText = "✅ " + f.name + " (" + Math.max(1, Math.round(f.size / 1024)) + " KB) pronto! Será enviado junto com o download.";
+    label.className = "text-[10px] text-emerald-400 font-bold mt-1";
+  }
+});
+
+async function iniciarBusca() {
+  var url = document.getElementById('urlInput').value.trim();
+  if (!url) { alert("Cole um link primeiro!"); return; }
+
+  var btn = document.getElementById('btnBuscar');
+  btn.disabled = true;
+  btn.innerText = "⏳ PROCESSANDO...";
+  document.getElementById('progressArea').classList.remove('hidden');
+  document.getElementById('resultArea').classList.add('hidden');
+  document.getElementById('errorArea').classList.add('hidden');
+
+  var dlId = "dl_" + Date.now();
+
+  var poll = setInterval(async function() {
+    try {
+      var r = await fetch('/api/progresso/' + dlId);
+      var d = await r.json();
+      document.getElementById('progPct').innerText = d.pct + "%";
+      document.getElementById('progBar').style.width = d.pct + "%";
+      document.getElementById('progText').innerText = d.status;
+    } catch (e) {}
+  }, 800);
+
+  var fd = new FormData();
+  fd.append('url', url);
+  fd.append('dl_id', dlId);
+  if (cookieFileObj) { fd.append('cookie_file', cookieFileObj); }
+
+  try {
+    var res = await fetch('/api/download', { method: 'POST', body: fd });
+    clearInterval(poll);
+    if (!res.ok) {
+      var err = await res.json();
+      throw new Error(err.detail || "Erro desconhecido");
+    }
+    var blob = await res.blob();
+    var a = document.createElement('a');
+    a.href = window.URL.createObjectURL(blob);
+    a.download = "musica.mp3";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    document.getElementById('resultArea').classList.remove('hidden');
+    document.getElementById('progText').innerText = "Concluído!";
+    document.getElementById('progBar').style.width = "100%";
+    document.getElementById('progPct').innerText = "100%";
+  } catch (e) {
+    clearInterval(poll);
+    document.getElementById('errorArea').classList.remove('hidden');
+    document.getElementById('errorMsg').innerText = e.message;
+  } finally {
+    btn.disabled = false;
+    btn.innerText = "🔍 BUSCAR E BAIXAR";
+  }
+}
+</script>
+</body>
+</html>
