@@ -4,334 +4,782 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>SoundCloud Downloader Pro</title>
-  
+
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#f97316">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="SoundCloud MP3">
+  <meta name="apple-mobile-web-app-title" content="SC MP3">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>">
 
-  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+
   <style>
-    body {
-      font-family: 'Plus Jakarta Sans', sans-serif;
-      -webkit-tap-highlight-color: transparent;
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-deep: #06080f;
+      --bg-card: rgba(14, 18, 30, 0.85);
+      --bg-input: rgba(8, 11, 20, 0.9);
+      --border: rgba(255,255,255,0.06);
+      --border-hover: rgba(255,255,255,0.12);
+      --accent: #ff6a00;
+      --accent-light: #ff9d4d;
+      --accent-glow: rgba(255, 106, 0, 0.25);
+      --green: #22c55e;
+      --green-glow: rgba(34, 197, 94, 0.2);
+      --rose: #f43f5e;
+      --text: #f1f5f9;
+      --text-dim: #64748b;
+      --text-mid: #94a3b8;
+      --radius: 16px;
+      --radius-sm: 10px;
     }
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #090d16; }
-    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-deep);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* === ANIMATED BACKGROUND === */
+    .bg-canvas {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+    }
+    .bg-orb {
+      position: absolute; border-radius: 50%; filter: blur(100px); opacity: 0.35;
+      animation: orbFloat 20s ease-in-out infinite alternate;
+    }
+    .bg-orb--1 { width: 600px; height: 600px; background: radial-gradient(circle, #ff6a00 0%, transparent 70%); top: -200px; left: -100px; animation-delay: 0s; }
+    .bg-orb--2 { width: 500px; height: 500px; background: radial-gradient(circle, #7c3aed 0%, transparent 70%); bottom: -150px; right: -100px; animation-delay: -7s; }
+    .bg-orb--3 { width: 350px; height: 350px; background: radial-gradient(circle, #06b6d4 0%, transparent 70%); top: 40%; left: 50%; animation-delay: -13s; }
+
+    @keyframes orbFloat {
+      0%   { transform: translate(0, 0) scale(1); }
+      33%  { transform: translate(60px, -40px) scale(1.1); }
+      66%  { transform: translate(-30px, 50px) scale(0.95); }
+      100% { transform: translate(40px, 20px) scale(1.05); }
+    }
+
+    .bg-grid {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 20%, transparent 100%);
+      -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 20%, transparent 100%);
+    }
+
+    /* === LAYOUT === */
+    .app-wrapper {
+      position: relative; z-index: 1;
+      display: flex; flex-direction: column; align-items: center;
+      min-height: 100vh; padding: 24px 16px 40px;
+    }
+
+    .main-card {
+      width: 100%; max-width: 640px;
+      background: var(--bg-card);
+      backdrop-filter: blur(40px) saturate(1.4);
+      -webkit-backdrop-filter: blur(40px) saturate(1.4);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 28px 24px;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.03) inset,
+        0 25px 60px -12px rgba(0,0,0,0.6),
+        0 0 80px -20px var(--accent-glow);
+      animation: cardEntry 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes cardEntry {
+      from { opacity: 0; transform: translateY(30px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* === HEADER === */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding-bottom: 20px; margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .header-left { display: flex; align-items: center; gap: 14px; }
+
+    .logo-icon {
+      width: 48px; height: 48px; border-radius: 14px;
+      background: linear-gradient(135deg, var(--accent), #ff9d4d);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; flex-shrink: 0;
+      box-shadow: 0 4px 20px var(--accent-glow);
+      animation: logoPulse 3s ease-in-out infinite;
+    }
+    @keyframes logoPulse {
+      0%, 100% { box-shadow: 0 4px 20px var(--accent-glow); }
+      50%      { box-shadow: 0 4px 35px rgba(255,106,0,0.4); }
+    }
+
+    .header-title {
+      font-size: 17px; font-weight: 800; letter-spacing: -0.3px;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .badge-kbps {
+      font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+      background: rgba(255,106,0,0.12); color: var(--accent-light);
+      padding: 3px 8px; border-radius: 20px;
+      border: 1px solid rgba(255,106,0,0.2);
+    }
+    .header-sub { font-size: 11px; color: var(--text-dim); font-weight: 500; margin-top: 2px; }
+
+    .header-actions { display: flex; gap: 8px; }
+
+    .btn-header {
+      height: 36px; padding: 0 12px;
+      background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); color: var(--text-mid);
+      font-size: 11px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; gap: 5px;
+      transition: all 0.2s;
+    }
+    .btn-header:hover { background: rgba(255,255,255,0.08); color: var(--text); border-color: var(--border-hover); }
+    .btn-header:active { transform: scale(0.95); }
+    .btn-header--accent {
+      background: rgba(255,106,0,0.1); border-color: rgba(255,106,0,0.25); color: var(--accent-light);
+    }
+    .btn-header--accent:hover { background: rgba(255,106,0,0.18); }
+
+    /* === PLAYER BAR === */
+    .player-bar {
+      display: none; margin-bottom: 20px;
+      background: var(--bg-input); border: 1px solid rgba(255,106,0,0.2);
+      border-radius: var(--radius); padding: 14px 16px;
+      animation: slideDown 0.3s ease;
+    }
+    .player-bar.active { display: block; }
+    .player-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .player-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .player-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; animation: pulse 1.5s infinite; }
+    .player-track { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .player-label { font-size: 10px; color: var(--accent-light); font-weight: 600; }
+    .player-close {
+      font-size: 11px; padding: 4px 10px; border-radius: 8px;
+      background: rgba(255,255,255,0.05); border: none; color: var(--text-dim);
+      cursor: pointer; transition: all 0.2s;
+    }
+    .player-close:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+    .player-bar audio { width: 100%; height: 32px; border-radius: 8px; accent-color: var(--accent); }
+
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* === PROGRESS BOX === */
+    .progress-box {
+      display: none; margin-bottom: 20px;
+      background: var(--bg-input); border: 1px solid rgba(34,197,94,0.25);
+      border-radius: var(--radius); padding: 16px;
+      animation: slideDown 0.3s ease;
+    }
+    .progress-box.active { display: block; }
+    .progress-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .progress-title { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
+    .progress-pct { font-size: 13px; font-weight: 800; color: var(--green); font-family: 'JetBrains Mono', monospace; }
+    .progress-track { width: 100%; height: 6px; background: rgba(255,255,255,0.06); border-radius: 10px; overflow: hidden; margin-bottom: 8px; }
+    .progress-fill {
+      height: 100%; border-radius: 10px;
+      background: linear-gradient(90deg, var(--green), #34d399);
+      transition: width 0.3s ease;
+      box-shadow: 0 0 12px var(--green-glow);
+    }
+    .progress-bottom { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); }
+    .progress-detail { color: var(--green); font-family: 'JetBrains Mono', monospace; font-size: 9px; }
+
+    /* === SEARCH === */
+    .search-section { margin-bottom: 24px; }
+    .search-label { font-size: 11px; font-weight: 600; color: var(--text-mid); margin-bottom: 8px; letter-spacing: 0.3px; }
+    .search-row { display: flex; gap: 10px; }
+
+    .search-input {
+      flex: 1; height: 48px; padding: 0 16px;
+      background: var(--bg-input); border: 1px solid var(--border);
+      border-radius: 14px; color: var(--text); font-size: 14px; font-family: inherit;
+      outline: none; transition: all 0.25s;
+    }
+    .search-input::placeholder { color: var(--text-dim); }
+    .search-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow), 0 0 20px -5px var(--accent-glow);
+    }
+
+    .btn-search {
+      height: 48px; padding: 0 24px; border: none; border-radius: 14px;
+      background: linear-gradient(135deg, var(--accent), #e85d00);
+      color: white; font-size: 13px; font-weight: 700; font-family: inherit;
+      cursor: pointer; display: flex; align-items: center; gap: 8px;
+      transition: all 0.25s; flex-shrink: 0;
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+    .btn-search:hover { transform: translateY(-1px); box-shadow: 0 6px 30px rgba(255,106,0,0.35); }
+    .btn-search:active { transform: scale(0.97); }
+    .btn-search:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .status-msg {
+      display: none; margin-top: 10px; padding: 10px 14px;
+      border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; text-align: center;
+      animation: slideDown 0.2s ease;
+    }
+    .status-msg.visible { display: block; }
+    .status-msg--loading { background: rgba(255,106,0,0.08); border: 1px solid rgba(255,106,0,0.15); color: var(--accent-light); }
+    .status-msg--error   { background: rgba(244,63,94,0.08); border: 1px solid rgba(244,63,94,0.15); color: var(--rose); }
+    .status-msg--empty   { background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: var(--text-dim); }
+    .status-msg--warn    { background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.15); color: #fbbf24; }
+
+    /* === RESULTS === */
+    .results-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .result-card {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--bg-input); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px;
+      transition: all 0.25s;
+      animation: resultEntry 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .result-card:hover { border-color: var(--border-hover); background: rgba(14,18,30,0.95); transform: translateY(-1px); }
+    .result-card--short { border-color: rgba(244,63,94,0.2); }
+
+    @keyframes resultEntry {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .result-thumb {
+      width: 56px; height: 56px; border-radius: 12px; object-fit: cover;
+      border: 1px solid var(--border); flex-shrink: 0;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .result-thumb-placeholder {
+      width: 56px; height: 56px; border-radius: 12px;
+      background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; flex-shrink: 0;
+    }
+
+    .result-info { flex: 1; min-width: 0; }
+    .result-title { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .result-artist { font-size: 11px; color: var(--text-dim); font-weight: 500; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .result-tags { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+    .tag {
+      font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 6px;
+      display: inline-flex; align-items: center; gap: 3px;
+    }
+    .tag--time { background: rgba(255,255,255,0.05); color: var(--text-mid); border: 1px solid var(--border); }
+    .tag--short { background: rgba(244,63,94,0.1); color: var(--rose); border: 1px solid rgba(244,63,94,0.2); }
+
+    .result-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+    .btn-action {
+      height: 38px; padding: 0 14px; border-radius: var(--radius-sm);
+      font-size: 11px; font-weight: 700; font-family: inherit;
+      cursor: pointer; display: flex; align-items: center; gap: 5px;
+      transition: all 0.2s; border: none;
+    }
+    .btn-action:active { transform: scale(0.93); }
+    .btn-action:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .btn-listen {
+      background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text-mid);
+    }
+    .btn-listen:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+
+    .btn-download {
+      background: linear-gradient(135deg, var(--green), #16a34a);
+      color: white; box-shadow: 0 2px 12px var(--green-glow);
+    }
+    .btn-download:hover { box-shadow: 0 4px 20px rgba(34,197,94,0.35); transform: translateY(-1px); }
+
+    /* === EMPTY STATE === */
+    .empty-state {
+      text-align: center; padding: 48px 20px;
+      animation: fadeIn 0.5s ease;
+    }
+    .empty-icon {
+      width: 64px; height: 64px; margin: 0 auto 16px;
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      border-radius: 20px; display: flex; align-items: center; justify-content: center;
+      font-size: 28px;
+    }
+    .empty-text { font-size: 13px; color: var(--text-dim); font-weight: 500; }
+    .empty-hint { font-size: 11px; color: rgba(100,116,139,0.6); margin-top: 6px; }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* === MODALS === */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);
+      align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal-overlay.active { display: flex; }
+
+    .modal-box {
+      background: #0e1220; border: 1px solid var(--border);
+      border-radius: 24px; width: 100%; max-width: 420px;
+      padding: 28px 24px; text-align: center;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+      animation: modalEntry 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes modalEntry {
+      from { opacity: 0; transform: scale(0.92) translateY(20px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .modal-icon {
+      width: 52px; height: 52px; border-radius: 16px; margin: 0 auto 14px;
+      display: flex; align-items: center; justify-content: center; font-size: 24px;
+    }
+    .modal-icon--blue { background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.2); }
+    .modal-icon--amber { background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.2); }
+
+    .modal-title { font-size: 15px; font-weight: 800; margin-bottom: 6px; }
+    .modal-desc { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; line-height: 1.5; }
+
+    .cover-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .cover-option {
+      background: var(--bg-input); border: 1px solid var(--border);
+      border-radius: 16px; padding: 12px; display: flex; flex-direction: column; align-items: center;
+    }
+    .cover-option--highlight { border-color: rgba(34,197,94,0.3); }
+    .cover-label { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .cover-label--dim { color: var(--text-dim); }
+    .cover-label--green { color: var(--green); }
+    .cover-img { width: 100px; height: 100px; object-fit: cover; border-radius: 12px; border: 1px solid var(--border); }
+
+    .modal-detail {
+      font-size: 11px; color: var(--text-mid); font-style: italic;
+      background: var(--bg-input); padding: 8px 12px; border-radius: 10px;
+      border: 1px solid var(--border); margin-bottom: 20px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .modal-fallback-card {
+      display: flex; align-items: center; gap: 14px; text-align: left;
+      background: var(--bg-input); border: 1px solid var(--border);
+      border-radius: 16px; padding: 14px; margin-bottom: 20px;
+    }
+    .modal-fallback-img { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; border: 1px solid var(--border); flex-shrink: 0; }
+    .modal-fallback-label { font-size: 9px; font-weight: 800; text-transform: uppercase; color: var(--accent-light); letter-spacing: 0.5px; }
+    .modal-fallback-title { font-size: 12px; font-weight: 700; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .modal-fallback-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+    .modal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .btn-modal {
+      height: 44px; border-radius: 12px; font-size: 12px; font-weight: 700;
+      font-family: inherit; cursor: pointer; transition: all 0.2s; border: none;
+    }
+    .btn-modal:active { transform: scale(0.95); }
+    .btn-modal--secondary { background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text-mid); }
+    .btn-modal--secondary:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+    .btn-modal--primary { background: linear-gradient(135deg, var(--green), #16a34a); color: white; box-shadow: 0 4px 15px var(--green-glow); }
+    .btn-modal--primary:hover { box-shadow: 0 6px 25px rgba(34,197,94,0.35); }
+
+    /* === HISTORY MODAL === */
+    .history-modal .modal-box { max-width: 480px; text-align: left; max-height: 80vh; display: flex; flex-direction: column; }
+    .history-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
+    .history-title { font-size: 14px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+    .history-close {
+      width: 32px; height: 32px; border-radius: 10px; background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border); color: var(--text-dim); font-size: 16px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+    }
+    .history-close:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+    .history-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+    .history-item {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .history-item:last-child { border-bottom: none; }
+    .history-item-title { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .history-item-artist { font-size: 10px; color: var(--text-dim); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .history-item-date { font-size: 9px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; flex-shrink: 0; }
+    .history-empty { text-align: center; padding: 32px; font-size: 12px; color: var(--text-dim); }
+
+    /* === FOOTER === */
+    .footer {
+      margin-top: 24px; text-align: center;
+      font-size: 11px; color: rgba(100,116,139,0.5); font-weight: 500;
+    }
+
+    /* === TOAST === */
+    .toast-container { position: fixed; top: 20px; right: 20px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
+    .toast {
+      padding: 12px 18px; border-radius: 12px; font-size: 12px; font-weight: 600;
+      backdrop-filter: blur(20px); border: 1px solid var(--border);
+      animation: toastIn 0.3s ease, toastOut 0.3s ease 3.5s forwards;
+      max-width: 320px;
+    }
+    .toast--success { background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.25); color: var(--green); }
+    .toast--error { background: rgba(244,63,94,0.12); border-color: rgba(244,63,94,0.25); color: var(--rose); }
+    @keyframes toastIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes toastOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-10px); } }
+
+    /* === SPINNER === */
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.2); border-top-color: white;
+      border-radius: 50%; animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* === WAVEFORM (during download) === */
+    .waveform { display: flex; align-items: end; gap: 2px; height: 16px; }
+    .waveform span {
+      width: 3px; border-radius: 2px; background: var(--green);
+      animation: wave 0.8s ease-in-out infinite alternate;
+    }
+    .waveform span:nth-child(1) { height: 40%; animation-delay: 0s; }
+    .waveform span:nth-child(2) { height: 70%; animation-delay: 0.1s; }
+    .waveform span:nth-child(3) { height: 50%; animation-delay: 0.2s; }
+    .waveform span:nth-child(4) { height: 90%; animation-delay: 0.3s; }
+    .waveform span:nth-child(5) { height: 60%; animation-delay: 0.15s; }
+    @keyframes wave { from { transform: scaleY(0.4); } to { transform: scaleY(1); } }
+
+    /* === RESPONSIVE === */
+    @media (max-width: 640px) {
+      .app-wrapper { padding: 12px 10px 32px; }
+      .main-card { padding: 20px 16px; border-radius: 20px; }
+      .header { flex-direction: column; align-items: flex-start; gap: 12px; }
+      .header-actions { width: 100%; }
+      .btn-header { flex: 1; justify-content: center; }
+      .search-row { flex-direction: column; }
+      .btn-search { width: 100%; justify-content: center; }
+      .result-card { flex-direction: column; align-items: flex-start; }
+      .result-actions { width: 100%; padding-top: 10px; border-top: 1px solid var(--border); }
+      .btn-action { flex: 1; justify-content: center; }
+      .cover-img { width: 80px; height: 80px; }
+      .toast-container { top: 10px; right: 10px; left: 10px; }
+      .toast { max-width: 100%; }
+    }
+
+    /* === SCROLLBAR === */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+    /* === SELECTION === */
+    ::selection { background: var(--accent); color: white; }
   </style>
 </head>
-<body class="bg-[#0b0f19] text-slate-100 min-h-screen flex flex-col items-center justify-start py-4 sm:py-10 px-3 sm:px-6 selection:bg-orange-500 selection:text-white">
+<body>
 
-  <!-- Container Principal -->
-  <div class="w-full max-w-2xl bg-[#111726]/90 backdrop-blur-md border border-slate-800/80 rounded-2xl sm:rounded-3xl p-4 sm:p-7 shadow-2xl shadow-black/50">
-    
-    <!-- Topo / Cabeçalho -->
-    <header class="flex items-center justify-between border-b border-slate-800/80 pb-4 mb-5">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-tr from-orange-600 to-amber-500 text-white rounded-xl sm:rounded-2xl flex items-center justify-center font-black text-xl sm:text-2xl shadow-lg shadow-orange-500/20 shrink-0">
-          ☁️
-        </div>
-        <div>
-          <h1 class="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2">
-            SoundCloud Downloader
-            <span class="text-[10px] font-extrabold uppercase bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full border border-orange-500/20">320kbps</span>
-          </h1>
-          <p class="text-[11px] sm:text-xs text-slate-400 font-medium">Letras Multi-Fonte • Capas Oficiais HD • MP3</p>
-        </div>
-      </div>
-      <div class="flex items-center gap-2">
-        <button id="btnInstalarApp" class="hidden h-9 px-3 bg-orange-500/15 hover:bg-orange-500/25 active:scale-95 text-orange-400 text-xs font-semibold rounded-xl border border-orange-500/30 transition-all flex items-center gap-1.5 cursor-pointer">
-          <span>📲</span> Instalar App
-        </button>
-        <button onclick="carregarHistorico()" class="h-9 px-3 bg-slate-800/80 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white text-xs font-semibold rounded-xl border border-slate-700/80 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer shrink-0">
-          <span>🕒</span>
-          <span class="hidden xs:inline sm:inline">Histórico</span>
-        </button>
-      </div>
-    </header>
+  <!-- Background Effects -->
+  <div class="bg-canvas">
+    <div class="bg-orb bg-orb--1"></div>
+    <div class="bg-orb bg-orb--2"></div>
+    <div class="bg-orb bg-orb--3"></div>
+  </div>
+  <div class="bg-grid"></div>
 
-    <!-- Player de Áudio Flutuante -->
-    <div id="playerBar" class="hidden mb-5 bg-[#080c14] border border-orange-500/30 rounded-2xl p-3.5 shadow-xl transition-all duration-300">
-      <div class="flex items-center justify-between gap-3 mb-2.5">
-        <div class="flex items-center gap-2.5 min-w-0">
-          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-          <div class="min-w-0">
-            <p id="playerTitulo" class="text-xs font-bold text-white truncate"></p>
-            <p class="text-[10px] text-orange-400 font-medium">Ouvindo prévia da faixa</p>
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <div class="app-wrapper">
+    <div class="main-card">
+
+      <!-- Header -->
+      <header class="header">
+        <div class="header-left">
+          <div class="logo-icon">☁️</div>
+          <div>
+            <div class="header-title">
+              SoundCloud Downloader
+              <span class="badge-kbps">320kbps</span>
+            </div>
+            <div class="header-sub">Letras Multi-Fonte · Capas HD · MP3</div>
           </div>
         </div>
-        <button onclick="fecharPlayer()" class="text-slate-400 hover:text-white text-xs px-2 py-1 bg-slate-800/80 rounded-lg transition">&times; Fechar</button>
-      </div>
-      <audio id="audioElement" controls class="w-full h-8 rounded-lg accent-orange-500"></audio>
-    </div>
+        <div class="header-actions">
+          <button id="btnInstalarApp" class="btn-header btn-header--accent" style="display:none" onclick="installApp()">
+            📲 Instalar
+          </button>
+          <button class="btn-header" onclick="carregarHistorico()">
+            🕒 Histórico
+          </button>
+        </div>
+      </header>
 
-    <!-- Barra de Progresso Real de Download -->
-    <div id="progressoDownloadBox" class="hidden mb-5 bg-[#080c14] border border-emerald-500/40 rounded-2xl p-4 shadow-xl">
-      <div class="flex items-center justify-between text-xs mb-2">
-        <span id="progressoTitulo" class="font-bold text-white truncate max-w-[70%]">Baixando música...</span>
-        <span id="progressoPct" class="font-bold text-emerald-400">0%</span>
+      <!-- Player Bar -->
+      <div class="player-bar" id="playerBar">
+        <div class="player-top">
+          <div class="player-info">
+            <span class="player-dot"></span>
+            <div style="min-width:0">
+              <div class="player-track" id="playerTitulo">—</div>
+              <div class="player-label">Ouvindo prévia</div>
+            </div>
+          </div>
+          <button class="player-close" onclick="fecharPlayer()">✕ Fechar</button>
+        </div>
+        <audio id="audioElement" controls></audio>
       </div>
-      <div class="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden mb-1.5">
-        <div id="progressoBarra" class="bg-gradient-to-r from-emerald-500 to-teal-400 h-2.5 rounded-full transition-all duration-200" style="width: 0%"></div>
-      </div>
-      <div class="flex items-center justify-between text-[10px] text-slate-400">
-        <span id="progressoStatus">Buscando letras e stream...</span>
-        <span id="progressoDetalhe" class="text-emerald-400 font-mono">Multi-API Lyrics Active</span>
-      </div>
-    </div>
 
-    <!-- Campo de Busca -->
-    <div class="space-y-2 mb-5">
-      <label class="block text-xs font-semibold text-slate-300 tracking-wide">Busque por nome da música ou cole o link:</label>
-      <div class="flex flex-col sm:flex-row gap-2">
-        <div class="relative flex-1">
-          <input 
-            type="text" 
-            id="queryInput" 
-            placeholder="Ex: kiss me again ou https://soundcloud.com/..." 
+      <!-- Progress Box -->
+      <div class="progress-box" id="progressoDownloadBox">
+        <div class="progress-top">
+          <span class="progress-title" id="progressoTitulo">Baixando...</span>
+          <span class="progress-pct" id="progressoPct">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressoBarra" style="width:0%"></div>
+        </div>
+        <div class="progress-bottom">
+          <span id="progressoStatus">Iniciando...</span>
+          <span class="progress-detail" id="progressoDetalhe">
+            <span class="waveform"><span></span><span></span><span></span><span></span><span></span></span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Search -->
+      <div class="search-section">
+        <div class="search-label">Busque por nome ou cole o link do SoundCloud</div>
+        <div class="search-row">
+          <input
+            type="text"
+            id="queryInput"
+            class="search-input"
+            placeholder="Ex: kiss me again ou https://soundcloud.com/..."
             onkeydown="if(event.key==='Enter') pesquisar()"
-            class="w-full bg-[#080c14] border border-slate-700/80 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all" 
+            autocomplete="off"
           />
-        </div>
-        <button 
-          id="btnBuscar" 
-          onclick="pesquisar()" 
-          class="h-11 sm:h-auto bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 active:scale-[0.98] text-white font-bold text-xs sm:text-sm px-6 py-3 rounded-xl transition shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2 cursor-pointer shrink-0"
-        >
-          <span>🔍</span> Buscar
-        </button>
-      </div>
-      <div id="statusMsg" class="hidden text-xs font-semibold py-2 text-center rounded-xl"></div>
-    </div>
-
-    <!-- Lista de Resultados -->
-    <div id="resultadosContainer" class="space-y-2.5">
-      <div id="emptyState" class="py-12 text-center text-slate-500">
-        <div class="text-3xl mb-2">🎧</div>
-        <p class="text-xs font-medium">Digite o nome de uma música ou link acima para começar</p>
-      </div>
-    </div>
-
-    <!-- Modal 1: Comparação de Capa (iTunes Encontrado) -->
-    <div id="modalCapa" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-[#111726] border border-slate-700 rounded-3xl max-w-sm sm:max-w-md w-full p-5 sm:p-6 shadow-2xl text-center animate-in fade-in zoom-in duration-200">
-        <div class="w-12 h-12 bg-blue-500/15 text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl border border-blue-500/20">🎨</div>
-        <h3 class="font-bold text-sm sm:text-base text-white">Deseja trocar a capa da música?</h3>
-        <p class="text-xs text-slate-400 mt-1 mb-4">Encontramos a capa oficial no iTunes em alta definição (600x600):</p>
-        
-        <div class="grid grid-cols-2 gap-3 mb-4">
-          <div class="bg-[#080c14] border border-slate-800 p-2.5 rounded-2xl flex flex-col items-center">
-            <span class="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Original SoundCloud</span>
-            <img id="imgCapaOriginal" src="" class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border border-slate-800 shadow-md">
-          </div>
-          <div class="bg-[#080c14] border border-emerald-500/40 p-2.5 rounded-2xl flex flex-col items-center">
-            <span class="text-[9px] sm:text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-2">Oficial iTunes HD</span>
-            <img id="imgCapaItunes" src="" class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border border-emerald-500/30 shadow-md">
-          </div>
-        </div>
-
-        <p id="txtDetalhesItunes" class="text-[11px] text-slate-300 mb-5 line-clamp-1 italic bg-[#080c14] py-2 px-3 rounded-xl border border-slate-800"></p>
-
-        <div class="grid grid-cols-2 gap-2.5">
-          <button id="btnUsarOriginal" class="h-11 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-bold rounded-xl transition cursor-pointer">
-            ❌ Manter Original
-          </button>
-          <button id="btnUsarItunes" class="h-11 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer">
-            ✅ Trocar p/ iTunes
+          <button id="btnBuscar" class="btn-search" onclick="pesquisar()">
+            🔍 Buscar
           </button>
         </div>
+        <div class="status-msg" id="statusMsg"></div>
       </div>
-    </div>
 
-    <!-- Modal 2: Aviso quando NÃO acha no iTunes -->
-    <div id="modalSemItunes" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-[#111726] border border-amber-500/30 rounded-3xl max-w-sm sm:max-w-md w-full p-5 sm:p-6 shadow-2xl text-center animate-in fade-in zoom-in duration-200">
-        <div class="w-12 h-12 bg-amber-500/15 text-amber-400 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl border border-amber-500/20">⚠️</div>
-        <h3 class="font-bold text-sm sm:text-base text-white">Capa não encontrada no iTunes</h3>
-        <p class="text-xs text-slate-400 mt-1 mb-4">O iTunes não possui registro oficial para esta versão/remix.</p>
-        
-        <div class="bg-[#080c14] border border-slate-800 p-3 rounded-2xl flex items-center gap-3.5 mb-4 text-left">
-          <img id="imgSemItunesCapa" src="" class="w-14 h-14 sm:w-16 sm:h-16 object-cover rounded-xl border border-slate-800 shrink-0">
-          <div class="min-w-0 flex-1">
-            <span class="text-[9px] font-bold text-orange-400 uppercase tracking-wider">Capa do SoundCloud</span>
-            <p id="txtSemItunesTitulo" class="text-xs font-bold text-white truncate mt-0.5"></p>
-            <p class="text-[11px] text-slate-400">A música será embutida com esta capa.</p>
-          </div>
-        </div>
-
-        <p class="text-xs text-slate-300 font-semibold mb-5">Deseja prosseguir com o download mesmo assim?</p>
-
-        <div class="grid grid-cols-2 gap-2.5">
-          <button id="btnCancelarDownload" class="h-11 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 text-xs font-bold rounded-xl transition cursor-pointer">
-            ❌ Cancelar
-          </button>
-          <button id="btnConfirmarDownloadOriginal" class="h-11 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer">
-            ✅ Sim, Baixar
-          </button>
+      <!-- Results -->
+      <div class="results-list" id="resultadosContainer">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon">🎧</div>
+          <div class="empty-text">Digite o nome de uma música ou cole um link</div>
+          <div class="empty-hint">Os resultados aparecerão aqui</div>
         </div>
       </div>
+
     </div>
 
-    <!-- Modal de Histórico -->
-    <div id="modalHistorico" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-[#111726] border border-slate-800 rounded-3xl max-w-lg w-full p-5 sm:p-6 max-h-[80vh] flex flex-col shadow-2xl">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
-          <h3 class="font-bold text-sm text-white flex items-center gap-2"><span>🕒</span> Histórico de Downloads</h3>
-          <button onclick="document.getElementById('modalHistorico').classList.add('hidden')" class="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-lg cursor-pointer">&times;</button>
-        </div>
-        <div id="listaHistorico" class="overflow-y-auto space-y-2 flex-1 divide-y divide-slate-800/60 text-xs pr-1"></div>
-      </div>
-    </div>
-
+    <footer class="footer">SoundCloud Downloader · Processamento na Nuvem</footer>
   </div>
 
-  <footer class="mt-6 text-center text-slate-500 text-xs font-medium">
-    SoundCloud Downloader • Processamento Seguro na Nuvem
-  </footer>
+  <!-- Modal: Cover Comparison -->
+  <div class="modal-overlay" id="modalCapa">
+    <div class="modal-box">
+      <div class="modal-icon modal-icon--blue">🎨</div>
+      <div class="modal-title">Trocar a capa da música?</div>
+      <div class="modal-desc">Encontramos a capa oficial no iTunes em alta definição (600×600)</div>
+      <div class="cover-compare">
+        <div class="cover-option">
+          <span class="cover-label cover-label--dim">SoundCloud</span>
+          <img id="imgCapaOriginal" class="cover-img" src="" alt="Original">
+        </div>
+        <div class="cover-option cover-option--highlight">
+          <span class="cover-label cover-label--green">iTunes HD</span>
+          <img id="imgCapaItunes" class="cover-img" src="" alt="iTunes">
+        </div>
+      </div>
+      <div class="modal-detail" id="txtDetalhesItunes"></div>
+      <div class="modal-actions">
+        <button class="btn-modal btn-modal--secondary" id="btnUsarOriginal">Manter Original</button>
+        <button class="btn-modal btn-modal--primary" id="btnUsarItunes">Usar iTunes HD</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: No iTunes Cover -->
+  <div class="modal-overlay" id="modalSemItunes">
+    <div class="modal-box">
+      <div class="modal-icon modal-icon--amber">⚠️</div>
+      <div class="modal-title">Capa não encontrada no iTunes</div>
+      <div class="modal-desc">O iTunes não possui registro oficial para esta versão/remix.</div>
+      <div class="modal-fallback-card">
+        <img id="imgSemItunesCapa" class="modal-fallback-img" src="" alt="Capa">
+        <div style="min-width:0;flex:1">
+          <div class="modal-fallback-label">Capa SoundCloud</div>
+          <div class="modal-fallback-title" id="txtSemItunesTitulo"></div>
+          <div class="modal-fallback-sub">A música será salva com esta capa.</div>
+        </div>
+      </div>
+      <div class="modal-desc" style="margin-bottom:16px;font-weight:600;color:var(--text-mid)">Prosseguir com o download?</div>
+      <div class="modal-actions">
+        <button class="btn-modal btn-modal--secondary" id="btnCancelarDownload">Cancelar</button>
+        <button class="btn-modal btn-modal--primary" id="btnConfirmarDownloadOriginal">Sim, Baixar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: History -->
+  <div class="modal-overlay history-modal" id="modalHistorico">
+    <div class="modal-box">
+      <div class="history-header">
+        <div class="history-title">🕒 Histórico</div>
+        <button class="history-close" onclick="document.getElementById('modalHistorico').classList.remove('active')">✕</button>
+      </div>
+      <div class="history-list" id="listaHistorico">
+        <div class="history-empty">Carregando...</div>
+      </div>
+    </div>
+  </div>
 
   <script>
+    // === ELEMENTS ===
     const audioElement = document.getElementById('audioElement');
     const playerBar = document.getElementById('playerBar');
     const playerTitulo = document.getElementById('playerTitulo');
 
+    // === PWA INSTALL ===
     let deferredPrompt;
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       deferredPrompt = e;
-      const btn = document.getElementById('btnInstalarApp');
-      if (btn) btn.classList.remove('hidden');
+      document.getElementById('btnInstalarApp').style.display = 'flex';
     });
-
-    document.getElementById('btnInstalarApp').addEventListener('click', async () => {
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        if (outcome === 'accepted') {
-          document.getElementById('btnInstalarApp').classList.add('hidden');
-        }
-        deferredPrompt = null;
-      }
-    });
-
-    function fecharPlayer() {
-      audioElement.pause();
-      audioElement.src = "";
-      playerBar.classList.add('hidden');
+    async function installApp() {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') document.getElementById('btnInstalarApp').style.display = 'none';
+      deferredPrompt = null;
     }
 
+    // === TOAST ===
+    function showToast(msg, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast toast--${type}`;
+      toast.textContent = msg;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    // === PLAYER ===
+    function fecharPlayer() {
+      audioElement.pause();
+      audioElement.src = '';
+      playerBar.classList.remove('active');
+    }
+
+    // === STATUS MSG ===
+    function setStatus(text, type) {
+      const el = document.getElementById('statusMsg');
+      el.textContent = text;
+      el.className = `status-msg visible status-msg--${type}`;
+    }
+    function hideStatus() {
+      document.getElementById('statusMsg').className = 'status-msg';
+    }
+
+    // === SEARCH ===
     async function pesquisar() {
       const query = document.getElementById('queryInput').value.trim();
-      const status = document.getElementById('statusMsg');
       const btn = document.getElementById('btnBuscar');
       const container = document.getElementById('resultadosContainer');
       const empty = document.getElementById('emptyState');
-      
-      if (!query) {
-        status.className = "text-center text-xs font-semibold text-amber-400 bg-amber-500/10 py-2.5 rounded-xl block border border-amber-500/20";
-        status.innerText = "Por favor, digite o nome de uma música ou cole o link.";
-        return;
-      }
-      
-      if (empty) empty.classList.add('hidden');
+
+      if (!query) { setStatus('Digite o nome de uma música ou cole um link.', 'warn'); return; }
+
+      if (empty) empty.style.display = 'none';
       btn.disabled = true;
-      btn.innerHTML = "<span>⏳</span> Buscando...";
-      status.className = "text-center text-xs font-semibold text-orange-400 bg-orange-500/10 py-2.5 rounded-xl block border border-orange-500/20 animate-pulse";
-      status.innerText = "Pesquisando faixas e carregando capas em HD...";
-      container.innerHTML = "";
+      btn.innerHTML = '<span class="spinner"></span> Buscando...';
+      setStatus('Pesquisando faixas e carregando capas...', 'loading');
+      container.innerHTML = '';
 
       const formData = new FormData();
       formData.append('query', query);
+
       try {
         const response = await fetch('/api/buscar', { method: 'POST', body: formData });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Erro na busca.");
-        
+        if (!response.ok) throw new Error(data.detail || 'Erro na busca.');
+
         if (data.resultados.length === 0) {
-          status.className = "text-center text-xs font-semibold text-slate-400 bg-slate-800/40 py-2.5 rounded-xl block border border-slate-700/60";
-          status.innerText = "Nenhum resultado encontrado para esta busca.";
+          setStatus('Nenhum resultado encontrado.', 'empty');
           return;
         }
-        
-        status.classList.add('hidden');
-        data.resultados.forEach(item => {
-          const div = document.createElement('div');
-          const isCurto = item.segundos && item.segundos <= 45;
 
-          div.className = `flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#080c14] border ${isCurto ? 'border-rose-900/60' : 'border-slate-800/90'} p-3.5 rounded-2xl hover:border-slate-700/90 transition-all duration-200 shadow-sm`;
+        hideStatus();
+        data.resultados.forEach((item, i) => {
+          const isCurto = item.segundos && item.segundos <= 45;
+          const div = document.createElement('div');
+          div.className = `result-card${isCurto ? ' result-card--short' : ''}`;
+          div.style.animationDelay = `${i * 0.06}s`;
+
+          const thumbHTML = item.thumb
+            ? `<img src="${item.thumb}" class="result-thumb" alt="Capa" loading="lazy">`
+            : `<div class="result-thumb-placeholder">🎵</div>`;
+
+          const safeTitle = item.titulo.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+          const safeArtist = item.artista.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+          const safeUrl = item.url.replace(/'/g, "\\'");
+
           div.innerHTML = `
-            <div class="flex items-center gap-3.5 min-w-0 flex-1">
-              ${item.thumb ? `<img src="${item.thumb}" class="w-14 h-14 rounded-xl object-cover border border-slate-800 shrink-0 shadow-md" alt="Capa">` : `<div class="w-14 h-14 bg-slate-800 rounded-xl flex items-center justify-center text-xl shrink-0 shadow-md">🎵</div>`}
-              <div class="min-w-0 flex-1">
-                <h4 class="text-xs sm:text-sm font-bold text-white truncate tracking-tight">${item.titulo}</h4>
-                <p class="text-[11px] text-slate-400 truncate mt-0.5 font-medium">${item.artista}</p>
-                
-                <div class="flex items-center gap-2 mt-1.5 flex-wrap">
-                  ${item.duracao ? `
-                    <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-800/90 text-slate-300 border border-slate-700/60">
-                      ⏱ ${item.duracao}
-                    </span>
-                  ` : ''}
-                  ${isCurto ? `
-                    <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-rose-950/80 text-rose-300 border border-rose-800/80">
-                      ⚠️ Trecho curto (${item.duracao})
-                    </span>
-                  ` : ''}
-                </div>
+            ${thumbHTML}
+            <div class="result-info">
+              <div class="result-title">${item.titulo}</div>
+              <div class="result-artist">${item.artista}</div>
+              <div class="result-tags">
+                ${item.duracao ? `<span class="tag tag--time">⏱ ${item.duracao}</span>` : ''}
+                ${isCurto ? `<span class="tag tag--short">⚠ Trecho curto</span>` : ''}
               </div>
             </div>
-            
-            <div class="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60 justify-end shrink-0">
-              <button onclick="ouvirPrevia('${item.url}', '${item.titulo.replace(/'/g, "\\'")}')" class="flex-1 sm:flex-initial h-10 px-3.5 bg-slate-800/90 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700/60">
-                ▶ Ouvir
-              </button>
-              <button onclick="prepararDownload('${item.url}', '${item.titulo.replace(/'/g, "\\'")}', '${item.artista.replace(/'/g, "\\'")}', '${item.thumb || ''}', this)" class="flex-1 sm:flex-initial h-10 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/30 cursor-pointer">
-                ⬇ Baixar MP3
-              </button>
+            <div class="result-actions">
+              <button class="btn-action btn-listen" onclick="ouvirPrevia('${safeUrl}', '${safeTitle}')">▶ Ouvir</button>
+              <button class="btn-action btn-download" onclick="prepararDownload('${safeUrl}', '${safeTitle}', '${safeArtist}', '${item.thumb || ''}', this)">⬇ MP3</button>
             </div>
           `;
           container.appendChild(div);
         });
       } catch (err) {
-        status.className = "text-center text-xs font-semibold text-rose-400 bg-rose-500/10 py-2.5 rounded-xl block border border-rose-500/20";
-        status.innerText = err.message;
+        setStatus(err.message, 'error');
       } finally {
         btn.disabled = false;
-        btn.innerHTML = "<span>🔍</span> Buscar";
+        btn.innerHTML = '🔍 Buscar';
       }
     }
 
+    // === PREVIEW ===
     async function ouvirPrevia(url, titulo) {
-      playerBar.classList.remove('hidden');
-      playerTitulo.innerText = "Carregando áudio: " + titulo;
-      audioElement.src = "";
-      
+      playerBar.classList.add('active');
+      playerTitulo.textContent = 'Carregando: ' + titulo;
+      audioElement.src = '';
+
       const formData = new FormData();
       formData.append('url', url);
 
       try {
         const response = await fetch('/api/stream', { method: 'POST', body: formData });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Não foi possível carregar o áudio.");
-
+        if (!response.ok) throw new Error(data.detail || 'Erro ao carregar áudio.');
         audioElement.src = data.stream_url;
-        playerTitulo.innerText = titulo;
+        playerTitulo.textContent = titulo;
         audioElement.play();
       } catch (err) {
-        alert("Erro ao tocar prévia: " + err.message);
-        playerBar.classList.add('hidden');
+        showToast('Erro ao tocar: ' + err.message, 'error');
+        playerBar.classList.remove('active');
       }
     }
 
+    // === PREPARE DOWNLOAD (check iTunes cover) ===
     async function prepararDownload(url, titulo, artista, thumbOriginal, btn) {
       const originalText = btn.innerHTML;
       btn.disabled = true;
-      btn.innerHTML = "<span>🎨</span> iTunes...";
+      btn.innerHTML = '<span class="spinner"></span>';
 
       const formData = new FormData();
       formData.append('titulo', titulo);
@@ -340,168 +788,154 @@
       try {
         const res = await fetch('/api/consultar-capa', { method: 'POST', body: formData });
         const data = await res.json();
-
         if (data.itunes) {
           abrirModalCapa(url, titulo, thumbOriginal, data.itunes.capa, data.itunes.detalhes, btn, originalText);
         } else {
           abrirModalSemItunes(url, titulo, thumbOriginal, btn, originalText);
         }
-      } catch (err) {
+      } catch (_) {
         abrirModalSemItunes(url, titulo, thumbOriginal, btn, originalText);
       }
     }
 
-    function abrirModalCapa(url, titulo, capaOriginal, capaItunes, detalhes, btn, originalBtnText) {
-      const modal = document.getElementById('modalCapa');
-      document.getElementById('imgCapaOriginal').src = capaOriginal || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=80";
+    function abrirModalCapa(url, titulo, capaOriginal, capaItunes, detalhes, btn, origText) {
+      document.getElementById('imgCapaOriginal').src = capaOriginal || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=80';
       document.getElementById('imgCapaItunes').src = capaItunes;
-      document.getElementById('txtDetalhesItunes').innerText = detalhes;
-
-      document.getElementById('btnUsarOriginal').onclick = () => {
-        modal.classList.add('hidden');
-        executarDownload(url, titulo, capaOriginal, btn, originalBtnText);
-      };
-
-      document.getElementById('btnUsarItunes').onclick = () => {
-        modal.classList.add('hidden');
-        executarDownload(url, titulo, capaItunes, btn, originalBtnText);
-      };
-
-      modal.classList.remove('hidden');
+      document.getElementById('txtDetalhesItunes').textContent = detalhes;
+      document.getElementById('btnUsarOriginal').onclick = () => { closeModal('modalCapa'); executarDownload(url, titulo, capaOriginal, btn, origText); };
+      document.getElementById('btnUsarItunes').onclick = () => { closeModal('modalCapa'); executarDownload(url, titulo, capaItunes, btn, origText); };
+      openModal('modalCapa');
     }
 
-    function abrirModalSemItunes(url, titulo, capaOriginal, btn, originalBtnText) {
-      const modal = document.getElementById('modalSemItunes');
-      document.getElementById('imgSemItunesCapa').src = capaOriginal || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=80";
-      document.getElementById('txtSemItunesTitulo').innerText = titulo;
-
-      document.getElementById('btnCancelarDownload').onclick = () => {
-        modal.classList.add('hidden');
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-      };
-
-      document.getElementById('btnConfirmarDownloadOriginal').onclick = () => {
-        modal.classList.add('hidden');
-        executarDownload(url, titulo, capaOriginal, btn, originalBtnText);
-      };
-
-      modal.classList.remove('hidden');
+    function abrirModalSemItunes(url, titulo, capaOriginal, btn, origText) {
+      document.getElementById('imgSemItunesCapa').src = capaOriginal || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=80';
+      document.getElementById('txtSemItunesTitulo').textContent = titulo;
+      document.getElementById('btnCancelarDownload').onclick = () => { closeModal('modalSemItunes'); btn.innerHTML = origText; btn.disabled = false; };
+      document.getElementById('btnConfirmarDownloadOriginal').onclick = () => { closeModal('modalSemItunes'); executarDownload(url, titulo, capaOriginal, btn, origText); };
+      openModal('modalSemItunes');
     }
 
+    function openModal(id) { document.getElementById(id).classList.add('active'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+    // Close modals on overlay click
+    document.querySelectorAll('.modal-overlay').forEach(el => {
+      el.addEventListener('click', (e) => { if (e.target === el) el.classList.remove('active'); });
+    });
+
+    // === DOWNLOAD ===
     async function executarDownload(url, tituloOriginal, capaFinal, btn, originalText) {
       btn.disabled = true;
-      btn.innerHTML = "<span>⏳</span> Baixando...";
+      btn.innerHTML = '<span class="spinner"></span>';
 
       const pBox = document.getElementById('progressoDownloadBox');
       const pTitulo = document.getElementById('progressoTitulo');
       const pPct = document.getElementById('progressoPct');
       const pBarra = document.getElementById('progressoBarra');
       const pStatus = document.getElementById('progressoStatus');
-      
-      pBox.classList.remove('hidden');
-      pTitulo.innerText = tituloOriginal;
-      pPct.innerText = "0%";
-      pBarra.style.width = "0%";
-      pStatus.innerText = "Consultando bancos de letras e stream...";
 
-      const downloadId = "dl_" + Date.now();
+      pBox.classList.add('active');
+      pTitulo.textContent = tituloOriginal;
+      pPct.textContent = '0%';
+      pBarra.style.width = '0%';
+      pStatus.textContent = 'Consultando letras e stream...';
 
-      const timerProgresso = setInterval(async () => {
+      const downloadId = 'dl_' + Date.now();
+
+      const timer = setInterval(async () => {
         try {
           const r = await fetch('/api/progresso/' + downloadId);
-          const pData = await r.json();
-          if (pData && pData.pct !== undefined) {
-            pPct.innerText = pData.pct + "%";
-            pBarra.style.width = pData.pct + "%";
-            if (pData.status) pStatus.innerText = pData.status;
+          const d = await r.json();
+          if (d && d.pct !== undefined) {
+            pPct.textContent = d.pct + '%';
+            pBarra.style.width = d.pct + '%';
+            if (d.status) pStatus.textContent = d.status;
           }
         } catch (_) {}
-      }, 500);
+      }, 400);
 
       const formData = new FormData();
       formData.append('url', url);
       formData.append('download_id', downloadId);
-      if (capaFinal) {
-        formData.append('capa_custom', capaFinal);
-      }
+      if (capaFinal) formData.append('capa_custom', capaFinal);
 
       try {
         const response = await fetch('/api/download', { method: 'POST', body: formData });
-        clearInterval(timerProgresso);
+        clearInterval(timer);
 
         if (!response.ok) {
           const data = await response.json();
-          throw new Error(data.detail || "Erro ao baixar.");
+          throw new Error(data.detail || 'Erro ao baixar.');
         }
 
-        pPct.innerText = "100%";
-        pBarra.style.width = "100%";
-        pStatus.innerText = "✓ MP3 320kbps pronto com Letras + Capa!";
+        pPct.textContent = '100%';
+        pBarra.style.width = '100%';
+        pStatus.textContent = '✓ MP3 320kbps pronto!';
 
         const disposition = response.headers.get('Content-Disposition');
-        let filename = tituloOriginal ? `${tituloOriginal}.mp3` : "musica.mp3";
+        let filename = tituloOriginal ? `${tituloOriginal}.mp3` : 'musica.mp3';
         if (disposition && disposition.indexOf('filename=') !== -1) {
-          const matches = disposition.match(/filename="?([^";]+)"?/);
-          if (matches && matches[1]) {
-            filename = decodeURIComponent(matches[1]);
-          }
+          const m = disposition.match(/filename="?([^";]+)"?/);
+          if (m && m[1]) filename = decodeURIComponent(m[1]);
         }
 
         const blob = await response.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
+        const dlUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(downloadUrl);
+        a.href = dlUrl; a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(dlUrl);
 
-        btn.innerHTML = "<span>✓</span> Concluído!";
-        setTimeout(() => { 
-          btn.innerHTML = originalText; 
+        btn.innerHTML = '✓ Pronto!';
+        showToast(`${tituloOriginal} baixado com sucesso!`, 'success');
+
+        setTimeout(() => {
+          btn.innerHTML = originalText;
           btn.disabled = false;
-          pBox.classList.add('hidden');
-        }, 3500);
+          pBox.classList.remove('active');
+        }, 3000);
       } catch (err) {
-        clearInterval(timerProgresso);
-        alert("Erro no download: " + err.message);
+        clearInterval(timer);
+        showToast('Erro: ' + err.message, 'error');
         btn.innerHTML = originalText;
         btn.disabled = false;
-        pBox.classList.add('hidden');
+        pBox.classList.remove('active');
       }
     }
 
+    // === HISTORY ===
     async function carregarHistorico() {
-      const modal = document.getElementById('modalHistorico');
       const lista = document.getElementById('listaHistorico');
-      modal.classList.remove('hidden');
-      lista.innerHTML = "<p class='text-slate-400 py-6 text-center text-xs'>Carregando registros...</p>";
+      openModal('modalHistorico');
+      lista.innerHTML = '<div class="history-empty">Carregando...</div>';
+
       try {
         const res = await fetch('/api/historico');
         const data = await res.json();
         if (!data.historico || data.historico.length === 0) {
-          lista.innerHTML = "<p class='text-slate-400 py-6 text-center text-xs'>Nenhum download registrado ainda.</p>";
+          lista.innerHTML = '<div class="history-empty">Nenhum download registrado ainda.</div>';
           return;
         }
-        lista.innerHTML = "";
-        data.historico.reverse().forEach(h => {
+        lista.innerHTML = '';
+        data.historico.slice().reverse().forEach(h => {
           const item = document.createElement('div');
-          item.className = "py-2.5 flex items-center justify-between gap-3";
+          item.className = 'history-item';
           item.innerHTML = `
-            <div class="min-w-0 flex-1">
-              <p class="font-bold text-white truncate text-xs">${h.titulo}</p>
-              <p class="text-slate-400 text-[10px] truncate">${h.artista}</p>
+            <div style="min-width:0;flex:1">
+              <div class="history-item-title">${h.titulo}</div>
+              <div class="history-item-artist">${h.artista}</div>
             </div>
-            <span class="text-[10px] text-slate-500 font-mono shrink-0">${h.data}</span>
+            <span class="history-item-date">${h.data}</span>
           `;
           lista.appendChild(item);
         });
-      } catch (err) {
-        lista.innerHTML = "<p class='text-rose-400 py-6 text-center text-xs'>Erro ao carregar histórico.</p>";
+      } catch (_) {
+        lista.innerHTML = '<div class="history-empty" style="color:var(--rose)">Erro ao carregar.</div>';
       }
     }
+
+    // === AUTO FOCUS ===
+    window.addEventListener('load', () => document.getElementById('queryInput').focus());
   </script>
 </body>
 </html>
