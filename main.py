@@ -2,10 +2,10 @@ import os
 import re
 import glob
 import json
-import sys
 import shutil
 import urllib.request
 import urllib.parse
+import concurrent.futures
 from threading import Lock, Thread
 import time
 from datetime import datetime
@@ -79,9 +79,7 @@ def fmt_duracao(segundos) -> str:
         return ""
     try:
         seg = int(float(segundos))
-        minutos = seg // 60
-        seg_rest = seg % 60
-        return f"{minutos}:{seg_rest:02d}"
+        return f"{seg // 60}:{seg % 60:02d}"
     except Exception:
         return ""
 
@@ -110,22 +108,39 @@ def url_valida_http(url: str) -> bool:
     except Exception:
         return False
 
-def obter_og_image(url: str) -> Optional[str]:
+def obter_capa_soundcloud(url: str) -> Optional[str]:
+    """
+    Obtém a capa oficial do SoundCloud em alta resolução (500x500).
+    Usa o oEmbed oficial como método primário e OpenGraph como fallback.
+    """
     if not url_valida_http(url):
         return None
+
+    # 1. Tenta via SoundCloud oEmbed (muito rápido, retorna ~500 bytes de JSON)
+    try:
+        oembed_url = f"https://soundcloud.com/oembed?format=json&url={urllib.parse.quote(url, safe=':/?=')}"
+        req = urllib.request.Request(oembed_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            data = json.load(r)
+            thumb = data.get("thumbnail_url")
+            if thumb:
+                return thumb.replace("-large.jpg", "-t500x500.jpg")
+    except Exception:
+        pass
+
+    # 2. Fallback: extração via meta tag og:image da página HTML
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-        with urllib.request.urlopen(req, timeout=4) as r:
-            html = r.read(250000).decode("utf-8", "ignore")
-        m = re.search(r'<meta\s+property="og:image"\s+content="([^"]+)"', html)
+        with urllib.request.urlopen(req, timeout=3) as r:
+            html = r.read(150000).decode("utf-8", "ignore")
+        m = re.search(r'<meta\s+property="og:image"\s+content="([^"]+)"', html) or \
+            re.search(r'<meta\s+content="([^"]+)"\s+property="og:image"', html)
         if m:
-            return m.group(1)
-        m2 = re.search(r'<meta\s+content="([^"]+)"\s+property="og:image"', html)
-        if m2:
-            return m2.group(1)
-        return None
+            return m.group(1).replace("-large.jpg", "-t500x500.jpg")
     except Exception:
-        return None
+        pass
+
+    return None
 
 # ==============================================================================
 # BUSCA DE LETRAS
@@ -179,12 +194,8 @@ def _buscar_vagalume(titulo: str, artista: str) -> Optional[str]:
 
 def buscar_letras_multi_fallback(titulo_raw: str, artista_raw: str = "") -> Optional[str]:
     artista_sub, sep, titulo_sub = titulo_raw.partition(" - ")
-    if sep:
-        art = artista_sub
-        tit = titulo_sub
-    else:
-        art = artista_raw if artista_raw and artista_raw.lower() != "soundcloud" else ""
-        tit = titulo_raw
+    art = artista_sub if sep else (artista_raw if artista_raw.lower() != "soundcloud" else "")
+    tit = titulo_sub if sep else titulo_raw
 
     tit_limpo = limpar_titulo_para_busca(tit)
     art_limpo = limpar_titulo_para_busca(art)
@@ -274,9 +285,7 @@ def buscar_itunes_capa(titulo_raw: str, artista_raw: str = ""):
 
             for res in data.get("results", []):
                 rt = palavras(res.get("trackName", ""))
-                score_tit = len(qt & rt)
-
-                if score_tit > 0:
+                if len(qt & rt) > 0:
                     art = res.get("artworkUrl100")
                     if art:
                         return {
@@ -323,7 +332,7 @@ def salvar_no_historico(titulo: str, artista: str, url: str):
             pass
 
 # ==============================================================================
-# ROTAS DA APLICAÇÃO (DEFINIDAS DE FORMA SÍNCRONA PARA NÃO BLOQUEAR EVENT LOOP)
+# ROTAS DA APLICAÇÃO
 # ==============================================================================
 @app.get("/", response_class=HTMLResponse)
 def index():
@@ -360,7 +369,7 @@ def obter_progresso(download_id: str):
     return progresso_downloads.get(download_id, {"pct": 0, "status": "Iniciando..."})
 
 @app.post("/api/buscar")
-@limiter.limit("20/minute")
+@limiter.limit("25/minute")
 def buscar_faixas(request: Request, query: str = Form(...)):
     query = query.strip()
     if not query:
@@ -374,7 +383,7 @@ def buscar_faixas(request: Request, query: str = Form(...)):
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(query, download=False)
-                thumb = info.get("thumbnail") or obter_og_image(query)
+                thumb = info.get("thumbnail") or obter_capa_soundcloud(query)
                 duracao_seg = info.get("duration")
                 return {
                     "resultados": [{
@@ -395,7 +404,9 @@ def buscar_faixas(request: Request, query: str = Form(...)):
             entradas = info.get("entries") or []
 
             resultados = []
-            for ent in entradas:
+            urls_sem_capa = []
+
+            for idx, ent in enumerate(entradas):
                 if not ent:
                     continue
                 url = ent.get("webpage_url") or ent.get("url")
@@ -413,6 +424,20 @@ def buscar_faixas(request: Request, query: str = Form(...)):
                     "segundos": dur_seg,
                     "thumb": thumb
                 })
+
+                # Adiciona para buscar capa em paralelo caso venha nula
+                if not thumb and url:
+                    urls_sem_capa.append((idx, url))
+
+            # Busca todas as capas de uma só vez em paralelo
+            if urls_sem_capa:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=min(10, len(urls_sem_capa))) as executor:
+                    futuros = {executor.submit(obter_capa_soundcloud, u): i for i, u in urls_sem_capa}
+                    for fut in concurrent.futures.as_completed(futuros):
+                        i = futuros[fut]
+                        capa = fut.result()
+                        if capa:
+                            resultados[i]["thumb"] = capa
 
             return {"resultados": resultados}
     except Exception as e:
@@ -497,7 +522,7 @@ def baixar_mp3(
             info = ydl.extract_info(url, download=True)
             titulo = info.get("title", "musica")
             artista = info.get("uploader", "")
-            thumb = info.get("thumbnail") or obter_og_image(url)
+            thumb = info.get("thumbnail") or obter_capa_soundcloud(url)
 
         progresso_downloads[download_id] = {"pct": 92, "status": "Aplicando tags ID3 e letras..."}
 
@@ -536,7 +561,6 @@ def baixar_mp3(
         progresso_downloads[download_id] = {"pct": 100, "status": "Download pronto!"}
         limpar_progresso_antigo(download_id)
 
-        # Remove o arquivo temporário do servidor assim que o envio ao navegador terminar
         background_tasks.add_task(remover_arquivo_seguro, arquivo_final)
 
         return FileResponse(
@@ -550,7 +574,6 @@ def baixar_mp3(
     except Exception as e:
         progresso_downloads[download_id] = {"pct": 0, "status": f"Erro: {str(e)}"}
         limpar_progresso_antigo(download_id)
-        # Limpa eventuais arquivos parciais gerados
         for f in glob.glob(os.path.join(PASTA_MUSICAS, f"{download_id}_*")):
             remover_arquivo_seguro(f)
         raise HTTPException(status_code=500, detail=f"Falha ao baixar: {limpar_ansi(str(e))}")
