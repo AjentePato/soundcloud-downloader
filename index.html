@@ -134,82 +134,86 @@
       </div>
     </div>
 
-    <!-- Modal 1: Comparação de Capa (iTunes Encontrado) -->
-    <div id="modalCapa" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-[#111726] border border-slate-700 rounded-3xl max-w-sm sm:max-w-md w-full p-5 sm:p-6 shadow-2xl text-center animate-in fade-in zoom-in duration-200">
-        <div class="w-12 h-12 bg-blue-500/15 text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl border border-blue-500/20">🎨</div>
-        <h3 class="font-bold text-sm sm:text-base text-white">Deseja trocar a capa da música?</h3>
-        <p class="text-xs text-slate-400 mt-1 mb-4">Encontramos a capa oficial no iTunes em alta definição (600x600):</p>
-        
-        <div class="grid grid-cols-2 gap-3 mb-4">
-          <div class="bg-[#080c14] border border-slate-800 p-2.5 rounded-2xl flex flex-col items-center">
-            <span class="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Original SoundCloud</span>
-            <img id="imgCapaOriginal" src="" class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border border-slate-800 shadow-md" alt="Capa Original">
-          </div>
-          <div class="bg-[#080c14] border border-emerald-500/40 p-2.5 rounded-2xl flex flex-col items-center">
-            <span class="text-[9px] sm:text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-2">Oficial iTunes HD</span>
-            <img id="imgCapaItunes" src="" class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border border-emerald-500/30 shadow-md" alt="Capa iTunes">
-          </div>
-        </div>
-
-        <p id="txtDetalhesItunes" class="text-[11px] text-slate-300 mb-5 line-clamp-1 italic bg-[#080c14] py-2 px-3 rounded-xl border border-slate-800"></p>
-
-        <div class="grid grid-cols-2 gap-2.5">
-          <button id="btnUsarOriginal" class="h-11 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-bold rounded-xl transition cursor-pointer">
-            ❌ Manter Original
-          </button>
-          <button id="btnUsarItunes" class="h-11 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer">
-            ✅ Trocar p/ iTunes
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal 2: Aviso quando NÃO acha no iTunes -->
-    <div id="modalSemItunes" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-[#111726] border border-amber-500/30 rounded-3xl max-w-sm sm:max-w-md w-full p-5 sm:p-6 shadow-2xl text-center animate-in fade-in zoom-in duration-200">
-        <div class="w-12 h-12 bg-amber-500/15 text-amber-400 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl border border-amber-500/20">⚠️</div>
-        <h3 class="font-bold text-sm sm:text-base text-white">Capa não encontrada no iTunes</h3>
-        <p class="text-xs text-slate-400 mt-1 mb-4">O iTunes não possui registro oficial para esta versão/remix.</p>
-        
-        <div class="bg-[#080c14] border border-slate-800 p-3 rounded-2xl flex items-center gap-3.5 mb-4 text-left">
-          <img id="imgSemItunesCapa" src="" class="w-14 h-14 sm:w-16 sm:h-16 object-cover rounded-xl border border-slate-800 shrink-0" alt="Capa SoundCloud">
-          <div class="min-w-0 flex-1">
-            <span class="text-[9px] font-bold text-orange-400 uppercase tracking-wider">Capa do SoundCloud</span>
-            <p id="txtSemItunesTitulo" class="text-xs font-bold text-white truncate mt-0.5"></p>
-            <p class="text-[11px] text-slate-400">A música será embutida com esta capa.</p>
-          </div>
-        </div>
-
-        <p class="text-xs text-slate-300 font-semibold mb-5">Deseja prosseguir com o download mesmo assim?</p>
-
-        <div class="grid grid-cols-2 gap-2.5">
-          <button id="btnCancelarDownload" class="h-11 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 text-xs font-bold rounded-xl transition cursor-pointer">
-            ❌ Cancelar
-          </button>
-          <button id="btnConfirmarDownloadOriginal" class="h-11 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer">
-            ✅ Sim, Baixar
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal de Histórico -->
-    <div id="modalHistorico" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-[#111726] border border-slate-800 rounded-3xl max-w-lg w-full p-5 sm:p-6 max-h-[80vh] flex flex-col shadow-2xl">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
-          <h3 class="font-bold text-sm text-white flex items-center gap-2"><span>🕒</span> Histórico de Downloads</h3>
-          <button onclick="fecharModais()" class="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-lg cursor-pointer">&times;</button>
-        </div>
-        <div id="listaHistorico" class="overflow-y-auto space-y-2 flex-1 divide-y divide-slate-800/60 text-xs pr-1"></div>
-      </div>
-    </div>
-
-  </div>
+  </div> <!-- Fim do Container Principal -->
 
   <footer class="mt-6 text-center text-slate-500 text-xs font-medium">
     SoundCloud Downloader Pro • Download em Conexão Direta • Processamento Paralelo
   </footer>
+
+  <!-- ================================================================= -->
+  <!-- MODAIS FORA DO CONTAINER (CORREÇÃO DE POSICIONAMENTO E VIEWPORT) -->
+  <!-- ================================================================= -->
+
+  <!-- Modal 1: Comparação de Capa (iTunes Encontrado) -->
+  <div id="modalCapa" class="hidden fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-[#111726] border border-slate-700/90 rounded-2xl sm:rounded-3xl max-w-sm sm:max-w-md w-full p-4 sm:p-6 shadow-2xl text-center my-auto animate-in fade-in zoom-in duration-200">
+      <div class="w-10 h-10 bg-blue-500/15 text-blue-400 rounded-xl flex items-center justify-center mx-auto mb-2 text-xl border border-blue-500/20">🎨</div>
+      <h3 class="font-bold text-sm sm:text-base text-white tracking-tight">Deseja trocar a capa da música?</h3>
+      <p class="text-[11px] sm:text-xs text-slate-400 mt-0.5 mb-3 sm:mb-4">Encontramos a capa oficial no iTunes em alta definição (600x600):</p>
+      
+      <div class="grid grid-cols-2 gap-2.5 sm:gap-3 mb-3 sm:mb-4">
+        <div class="bg-[#080c14] border border-slate-800 p-2 sm:p-2.5 rounded-xl sm:rounded-2xl flex flex-col items-center">
+          <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Original SoundCloud</span>
+          <img id="imgCapaOriginal" src="" class="w-20 h-20 sm:w-28 sm:h-28 object-cover rounded-lg sm:rounded-xl border border-slate-800 shadow-md" alt="Capa Original">
+        </div>
+        <div class="bg-[#080c14] border border-emerald-500/40 p-2 sm:p-2.5 rounded-xl sm:rounded-2xl flex flex-col items-center">
+          <span class="text-[9px] font-bold text-emerald-400 uppercase tracking-wider mb-1.5">Oficial iTunes HD</span>
+          <img id="imgCapaItunes" src="" class="w-20 h-20 sm:w-28 sm:h-28 object-cover rounded-lg sm:rounded-xl border border-emerald-500/30 shadow-md" alt="Capa iTunes">
+        </div>
+      </div>
+
+      <p id="txtDetalhesItunes" class="text-[10px] sm:text-[11px] text-slate-300 mb-3 sm:mb-4 line-clamp-1 italic bg-[#080c14] py-1.5 sm:py-2 px-3 rounded-xl border border-slate-800"></p>
+
+      <div class="grid grid-cols-2 gap-2 sm:gap-2.5">
+        <button id="btnUsarOriginal" class="h-10 sm:h-11 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5">
+          ❌ Manter Original
+        </button>
+        <button id="btnUsarItunes" class="h-10 sm:h-11 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer flex items-center justify-center gap-1.5">
+          ✅ Trocar p/ iTunes
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Aviso quando NÃO acha no iTunes -->
+  <div id="modalSemItunes" class="hidden fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-[#111726] border border-amber-500/30 rounded-2xl sm:rounded-3xl max-w-sm sm:max-w-md w-full p-4 sm:p-6 shadow-2xl text-center my-auto animate-in fade-in zoom-in duration-200">
+      <div class="w-10 h-10 bg-amber-500/15 text-amber-400 rounded-xl flex items-center justify-center mx-auto mb-2 text-xl border border-amber-500/20">⚠️</div>
+      <h3 class="font-bold text-sm sm:text-base text-white tracking-tight">Capa não encontrada no iTunes</h3>
+      <p class="text-[11px] sm:text-xs text-slate-400 mt-0.5 mb-3 sm:mb-4">O iTunes não possui registro oficial para esta versão/remix.</p>
+      
+      <div class="bg-[#080c14] border border-slate-800 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl flex items-center gap-3 mb-3 sm:mb-4 text-left">
+        <img id="imgSemItunesCapa" src="" class="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-lg sm:rounded-xl border border-slate-800 shrink-0" alt="Capa SoundCloud">
+        <div class="min-w-0 flex-1">
+          <span class="text-[9px] font-bold text-orange-400 uppercase tracking-wider">Capa do SoundCloud</span>
+          <p id="txtSemItunesTitulo" class="text-xs font-bold text-white truncate mt-0.5"></p>
+          <p class="text-[10px] sm:text-[11px] text-slate-400">A música será embutida com esta capa.</p>
+        </div>
+      </div>
+
+      <p class="text-[11px] sm:text-xs text-slate-300 font-semibold mb-3 sm:mb-4">Deseja prosseguir com o download mesmo assim?</p>
+
+      <div class="grid grid-cols-2 gap-2 sm:gap-2.5">
+        <button id="btnCancelarDownload" class="h-10 sm:h-11 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5">
+          ❌ Cancelar
+        </button>
+        <button id="btnConfirmarDownloadOriginal" class="h-10 sm:h-11 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer flex items-center justify-center gap-1.5">
+          ✅ Sim, Baixar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Histórico de Downloads -->
+  <div id="modalHistorico" class="hidden fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-[#111726] border border-slate-800 rounded-2xl sm:rounded-3xl max-w-lg w-full p-4 sm:p-6 max-h-[85dvh] sm:max-h-[80vh] flex flex-col shadow-2xl my-auto">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+        <h3 class="font-bold text-sm text-white flex items-center gap-2"><span>🕒</span> Histórico de Downloads</h3>
+        <button onclick="fecharModais()" class="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-lg cursor-pointer">&times;</button>
+      </div>
+      <div id="listaHistorico" class="overflow-y-auto space-y-2 flex-1 divide-y divide-slate-800/60 text-xs pr-1"></div>
+    </div>
+  </div>
 
   <script>
     const audioElement = document.getElementById('audioElement');
@@ -227,6 +231,12 @@
 
     function fecharModais() {
       document.querySelectorAll('#modalCapa, #modalSemItunes, #modalHistorico').forEach(m => m.classList.add('hidden'));
+      document.body.classList.remove('overflow-hidden');
+    }
+
+    function abrirModal(modalElement) {
+      modalElement.classList.remove('hidden');
+      document.body.classList.add('overflow-hidden');
     }
 
     window.addEventListener('keydown', (e) => {
@@ -418,16 +428,16 @@
       document.getElementById('txtDetalhesItunes').innerText = detalhes;
 
       document.getElementById('btnUsarOriginal').onclick = () => {
-        modal.classList.add('hidden');
+        fecharModais();
         executarDownload(url, titulo, artista, segundos, capaOriginal, btn, originalBtnText);
       };
 
       document.getElementById('btnUsarItunes').onclick = () => {
-        modal.classList.add('hidden');
+        fecharModais();
         executarDownload(url, titulo, artista, segundos, capaItunes, btn, originalBtnText);
       };
 
-      modal.classList.remove('hidden');
+      abrirModal(modal);
     }
 
     function abrirModalSemItunes(url, titulo, artista, segundos, capaOriginal, btn, originalBtnText) {
@@ -436,17 +446,17 @@
       document.getElementById('txtSemItunesTitulo').innerText = titulo;
 
       document.getElementById('btnCancelarDownload').onclick = () => {
-        modal.classList.add('hidden');
+        fecharModais();
         btn.innerHTML = originalBtnText;
         btn.disabled = false;
       };
 
       document.getElementById('btnConfirmarDownloadOriginal').onclick = () => {
-        modal.classList.add('hidden');
+        fecharModais();
         executarDownload(url, titulo, artista, segundos, capaOriginal, btn, originalBtnText);
       };
 
-      modal.classList.remove('hidden');
+      abrirModal(modal);
     }
 
     async function executarDownload(url, tituloOriginal, artistaOriginal, duracaoOriginal, capaFinal, btn, originalText) {
@@ -604,7 +614,7 @@
     async function carregarHistorico() {
       const modal = document.getElementById('modalHistorico');
       const lista = document.getElementById('listaHistorico');
-      modal.classList.remove('hidden');
+      abrirModal(modal);
       lista.innerHTML = "<p class='text-slate-400 py-6 text-center text-xs'>Carregando registros...</p>";
       try {
         const res = await fetch('/api/historico');
