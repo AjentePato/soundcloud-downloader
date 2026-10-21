@@ -40,9 +40,9 @@
         <div>
           <h1 class="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2">
             SoundCloud Downloader
-            <span class="text-[10px] font-extrabold uppercase bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full border border-orange-500/20">320kbps</span>
+            <span class="text-[10px] font-extrabold uppercase bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full border border-orange-500/20">PRO</span>
           </h1>
-          <p class="text-[11px] sm:text-xs text-slate-400 font-medium">Letras Multi-Fonte • Capas Oficiais HD • MP3</p>
+          <p class="text-[11px] sm:text-xs text-slate-400 font-medium">Letras Sincronizadas (.LRC) • Capas Oficiais HD • MP3 VBR / 320k</p>
         </div>
       </div>
       <div class="flex items-center gap-2">
@@ -71,7 +71,7 @@
       <audio id="audioElement" controls class="w-full h-8 rounded-lg accent-orange-500"></audio>
     </div>
 
-    <!-- Barra de Progresso Real de Download -->
+    <!-- Barra de Progresso Real de Download (Server-Sent Events) -->
     <div id="progressoDownloadBox" class="hidden mb-5 bg-[#080c14] border border-emerald-500/40 rounded-2xl p-4 shadow-xl">
       <div class="flex items-center justify-between text-xs mb-2">
         <span id="progressoTitulo" class="font-bold text-white truncate max-w-[70%]">Baixando música...</span>
@@ -81,9 +81,24 @@
         <div id="progressoBarra" class="bg-gradient-to-r from-emerald-500 to-teal-400 h-2.5 rounded-full transition-all duration-200" style="width: 0%"></div>
       </div>
       <div class="flex items-center justify-between text-[10px] text-slate-400">
-        <span id="progressoStatus">Buscando letras e stream...</span>
-        <span id="progressoDetalhe" class="text-emerald-400 font-mono">Multi-API Lyrics Active</span>
+        <span id="progressoStatus">Conectando aos servidores...</span>
+        <span id="progressoDetalhe" class="text-emerald-400 font-mono">Stream Real-Time</span>
       </div>
+    </div>
+
+    <!-- Opção 3.A: Seletor de Fidelidade / Qualidade de Áudio -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between bg-[#080c14] border border-slate-800/90 rounded-2xl px-4 py-2.5 mb-4 gap-2 shadow-inner">
+      <div class="flex items-center gap-2 text-slate-300 text-xs font-semibold">
+        <span class="text-sm">🎚️</span>
+        <span>Fidelidade do Áudio:</span>
+        <span class="text-[10px] text-slate-500 font-normal hidden sm:inline">(Taxa de amostragem e bitrate)</span>
+      </div>
+      <select id="selectQualidade" class="bg-[#111726] border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-orange-400 font-semibold focus:outline-none focus:border-orange-500 cursor-pointer transition">
+        <option value="vbr0" selected>⚡ VBR 0 (Alta Fidelidade - Recomendado)</option>
+        <option value="320">💎 320 kbps CBR (Bitrate Máximo)</option>
+        <option value="192">⚖️ 192 kbps CBR (Balanceado)</option>
+        <option value="128">🪶 128 kbps CBR (Leve / Rápido)</option>
+      </select>
     </div>
 
     <!-- Campo de Busca -->
@@ -183,7 +198,7 @@
       <div class="bg-[#111726] border border-slate-800 rounded-3xl max-w-lg w-full p-5 sm:p-6 max-h-[80vh] flex flex-col shadow-2xl">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
           <h3 class="font-bold text-sm text-white flex items-center gap-2"><span>🕒</span> Histórico de Downloads</h3>
-          <button onclick="document.getElementById('modalHistorico').classList.add('hidden')" class="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-lg cursor-pointer">&times;</button>
+          <button onclick="fecharModais()" class="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-lg cursor-pointer">&times;</button>
         </div>
         <div id="listaHistorico" class="overflow-y-auto space-y-2 flex-1 divide-y divide-slate-800/60 text-xs pr-1"></div>
       </div>
@@ -192,7 +207,7 @@
   </div>
 
   <footer class="mt-6 text-center text-slate-500 text-xs font-medium">
-    SoundCloud Downloader • Processamento Seguro na Nuvem
+    SoundCloud Downloader Pro • Processamento Seguro na Nuvem • Áudio de Alta Fidelidade
   </footer>
 
   <script>
@@ -200,6 +215,35 @@
     const playerBar = document.getElementById('playerBar');
     const playerTitulo = document.getElementById('playerTitulo');
 
+    // Sanitização para prevenção de XSS
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // Fechar modais ao clicar no fundo ou com tecla ESC
+    function fecharModais() {
+      document.querySelectorAll('#modalCapa, #modalSemItunes, #modalHistorico').forEach(m => m.classList.add('hidden'));
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        fecharModais();
+        fecharPlayer();
+      }
+    });
+
+    document.querySelectorAll('#modalCapa, #modalSemItunes, #modalHistorico').forEach(modal => {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) fecharModais();
+      });
+    });
+
+    // PWA Support
     let deferredPrompt;
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
@@ -208,7 +252,7 @@
       if (btn) btn.classList.remove('hidden');
     });
 
-    document.getElementById('btnInstalarApp').addEventListener('click', async () => {
+    document.getElementById('btnInstalarApp')?.addEventListener('click', async () => {
       if (deferredPrompt) {
         deferredPrompt.prompt();
         const { outcome } = await deferredPrompt.userChoice;
@@ -266,20 +310,20 @@
           div.className = `flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#080c14] border ${isCurto ? 'border-rose-900/60' : 'border-slate-800/90'} p-3.5 rounded-2xl hover:border-slate-700/90 transition-all duration-200 shadow-sm`;
           div.innerHTML = `
             <div class="flex items-center gap-3.5 min-w-0 flex-1">
-              ${item.thumb ? `<img src="${item.thumb}" class="w-14 h-14 rounded-xl object-cover border border-slate-800 shrink-0 shadow-md" alt="Capa">` : `<div class="w-14 h-14 bg-slate-800 rounded-xl flex items-center justify-center text-xl shrink-0 shadow-md">🎵</div>`}
+              ${item.thumb ? `<img src="${escapeHtml(item.thumb)}" class="w-14 h-14 rounded-xl object-cover border border-slate-800 shrink-0 shadow-md" alt="Capa">` : `<div class="w-14 h-14 bg-slate-800 rounded-xl flex items-center justify-center text-xl shrink-0 shadow-md">🎵</div>`}
               <div class="min-w-0 flex-1">
-                <h4 class="text-xs sm:text-sm font-bold text-white truncate tracking-tight">${item.titulo}</h4>
-                <p class="text-[11px] text-slate-400 truncate mt-0.5 font-medium">${item.artista}</p>
+                <h4 class="text-xs sm:text-sm font-bold text-white truncate tracking-tight">${escapeHtml(item.titulo)}</h4>
+                <p class="text-[11px] text-slate-400 truncate mt-0.5 font-medium">${escapeHtml(item.artista)}</p>
                 
                 <div class="flex items-center gap-2 mt-1.5 flex-wrap">
                   ${item.duracao ? `
                     <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-800/90 text-slate-300 border border-slate-700/60">
-                      ⏱ ${item.duracao}
+                      ⏱ ${escapeHtml(item.duracao)}
                     </span>
                   ` : ''}
                   ${isCurto ? `
                     <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-rose-950/80 text-rose-300 border border-rose-800/80">
-                      ⚠️ Trecho curto (${item.duracao})
+                      ⚠️ Trecho curto (${escapeHtml(item.duracao)})
                     </span>
                   ` : ''}
                 </div>
@@ -287,14 +331,23 @@
             </div>
             
             <div class="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60 justify-end shrink-0">
-              <button onclick="ouvirPrevia('${item.url}', '${item.titulo.replace(/'/g, "\\'")}')" class="flex-1 sm:flex-initial h-10 px-3.5 bg-slate-800/90 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700/60">
+              <button class="btn-ouvir flex-1 sm:flex-initial h-10 px-3.5 bg-slate-800/90 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700/60">
                 ▶ Ouvir
               </button>
-              <button onclick="prepararDownload('${item.url}', '${item.titulo.replace(/'/g, "\\'")}', '${item.artista.replace(/'/g, "\\'")}', '${item.thumb || ''}', this)" class="flex-1 sm:flex-initial h-10 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/30 cursor-pointer">
+              <button class="btn-baixar flex-1 sm:flex-initial h-10 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/30 cursor-pointer">
                 ⬇ Baixar MP3
               </button>
             </div>
           `;
+
+          // Eventos seguros (livres de injeção XSS)
+          div.querySelector('.btn-ouvir').addEventListener('click', () => {
+            ouvirPrevia(item.url, item.titulo);
+          });
+          div.querySelector('.btn-baixar').addEventListener('click', function() {
+            prepararDownload(item.url, item.titulo, item.artista, item.thumb || '', this);
+          });
+
           container.appendChild(div);
         });
       } catch (err) {
@@ -377,7 +430,7 @@
 
       document.getElementById('btnCancelarDownload').onclick = () => {
         modal.classList.add('hidden');
-        btn.innerHTML = originalBtnText; // <-- CORREÇÃO: Variável originalBtnText restaurada
+        btn.innerHTML = originalBtnText;
         btn.disabled = false;
       };
 
@@ -398,37 +451,90 @@
       const pPct = document.getElementById('progressoPct');
       const pBarra = document.getElementById('progressoBarra');
       const pStatus = document.getElementById('progressoStatus');
+      const pDetalhe = document.getElementById('progressoDetalhe');
       
+      const qualidadeSelecionada = document.getElementById('selectQualidade').value;
+
       pBox.classList.remove('hidden');
       pTitulo.innerText = tituloOriginal;
       pPct.innerText = "0%";
       pBarra.style.width = "0%";
-      pStatus.innerText = "Consultando bancos de letras e stream...";
+      pStatus.innerText = "Conectando ao stream do SoundCloud...";
+      pDetalhe.innerText = "Iniciando processamento";
 
       const downloadId = "dl_" + Date.now();
 
-      const timerProgresso = setInterval(async () => {
-        try {
-          const r = await fetch('/api/progresso/' + downloadId);
-          const pData = await r.json();
-          if (pData && pData.pct !== undefined) {
-            pPct.innerText = pData.pct + "%";
-            pBarra.style.width = pData.pct + "%";
-            if (pData.status) pStatus.innerText = pData.status;
-          }
-        } catch (_) {}
-      }, 500);
+      // Opção 2.C: Stream de Progresso em Tempo Real via Server-Sent Events (SSE) com Polling Fallback
+      let eventSource = null;
+      let timerFallback = null;
+
+      function atualizarUIProgresso(data) {
+        if (!data) return;
+        if (data.pct !== undefined) {
+          pPct.innerText = data.pct + "%";
+          pBarra.style.width = data.pct + "%";
+        }
+        if (data.status) pStatus.innerText = data.status;
+        if (data.detalhe) pDetalhe.innerText = data.detalhe;
+      }
+
+      function fecharStreams() {
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        if (timerFallback) {
+          clearInterval(timerFallback);
+          timerFallback = null;
+        }
+      }
+
+      if (window.EventSource) {
+        eventSource = new EventSource('/api/progresso/stream/' + downloadId);
+        eventSource.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            atualizarUIProgresso(data);
+            if (data.pct >= 100 || (data.status && data.status.startsWith('Erro'))) {
+              fecharStreams();
+            }
+          } catch (_) {}
+        };
+        eventSource.onerror = () => {
+          fecharStreams();
+          // Ativa fallback polling caso o SSE seja interrompido
+          timerFallback = setInterval(async () => {
+            try {
+              const r = await fetch('/api/progresso/' + downloadId);
+              const data = await r.json();
+              atualizarUIProgresso(data);
+              if (data.pct >= 100) fecharStreams();
+            } catch (_) {}
+          }, 600);
+        };
+      } else {
+        // Fallback para navegadores legados
+        timerFallback = setInterval(async () => {
+          try {
+            const r = await fetch('/api/progresso/' + downloadId);
+            const data = await r.json();
+            atualizarUIProgresso(data);
+            if (data.pct >= 100) fecharStreams();
+          } catch (_) {}
+        }, 600);
+      }
 
       const formData = new FormData();
       formData.append('url', url);
       formData.append('download_id', downloadId);
+      formData.append('qualidade', qualidadeSelecionada);
       if (capaFinal) {
         formData.append('capa_custom', capaFinal);
       }
 
       try {
         const response = await fetch('/api/download', { method: 'POST', body: formData });
-        clearInterval(timerProgresso);
+        fecharStreams();
 
         if (!response.ok) {
           const data = await response.json();
@@ -437,7 +543,6 @@
 
         pPct.innerText = "100%";
         pBarra.style.width = "100%";
-        pStatus.innerText = "✓ MP3 320kbps pronto com Letras + Capa!";
 
         const disposition = response.headers.get('Content-Disposition');
         let filename = tituloOriginal ? `${tituloOriginal}.mp3` : "musica.mp3";
@@ -470,7 +575,7 @@
           pBox.classList.add('hidden');
         }, 3500);
       } catch (err) {
-        clearInterval(timerProgresso);
+        fecharStreams();
         alert("Erro no download: " + err.message);
         btn.innerHTML = originalText;
         btn.disabled = false;
@@ -496,10 +601,10 @@
           item.className = "py-2.5 flex items-center justify-between gap-3";
           item.innerHTML = `
             <div class="min-w-0 flex-1">
-              <p class="font-bold text-white truncate text-xs">${h.titulo}</p>
-              <p class="text-slate-400 text-[10px] truncate">${h.artista}</p>
+              <p class="font-bold text-white truncate text-xs">${escapeHtml(h.titulo)}</p>
+              <p class="text-slate-400 text-[10px] truncate">${escapeHtml(h.artista || 'SoundCloud')} • <span class="text-orange-400/90">${escapeHtml(h.qualidade || 'MP3')}</span></p>
             </div>
-            <span class="text-[10px] text-slate-500 font-mono shrink-0">${h.data}</span>
+            <span class="text-[10px] text-slate-500 font-mono shrink-0">${escapeHtml(h.data)}</span>
           `;
           lista.appendChild(item);
         });
