@@ -320,10 +320,7 @@ async def buscar_letras_multi_fallback(
     artista_raw: str = "",
     duracao_seg: Optional[int] = None
 ) -> Optional[Dict[str, str]]:
-    """
-    Busca concorrente de altíssima velocidade:
-    Dispara LRCLIB (exato + busca) e Vagalume em paralelo, finalizando em < 800ms.
-    """
+    """Busca concorrente em paralelo: LRCLIB (exato + busca) e Vagalume finalizando em < 800ms."""
     if not titulo_raw:
         return None
 
@@ -336,34 +333,27 @@ async def buscar_letras_multi_fallback(
 
     tarefas = []
 
-    # 1. Correspondência exata no LRCLIB com duração (se disponível)
     if art_limpo and tit_limpo:
         tarefas.append(_buscar_lrclib_exato(tit_limpo, art_limpo, duracao_seg))
 
-    # 2. Busca textual completa no LRCLIB
     query_completa = f"{art_limpo} {tit_limpo}".strip() if art_limpo else tit_limpo
     if query_completa:
         tarefas.append(_buscar_lrclib_search(query_completa))
 
-    # 3. Vagalume (resposta rápida para pop, rap e nacionais)
     if art_limpo and tit_limpo:
         tarefas.append(_buscar_vagalume(tit_limpo, art_limpo))
 
-    # Executa todas as consultas de forma concorrente em paralelo
     if tarefas:
         resultados = await asyncio.gather(*tarefas, return_exceptions=True)
 
-        # Prioridade máxima: Letra sincronizada (.LRC)
         for r in resultados:
             if isinstance(r, dict) and r.get("tipo") == "sincronizada":
                 return r
 
-        # Segunda prioridade: Letra tradicional completa
         for r in resultados:
             if isinstance(r, dict) and r.get("letra"):
                 return r
 
-    # Fallback rápido: Busca apenas pelo título se a query completa falhou
     if tit_limpo and tit_limpo != query_completa:
         res_tit = await _buscar_lrclib_search(tit_limpo)
         if res_tit:
@@ -586,7 +576,6 @@ async def buscar_faixas(request: Request, query: str = Form(...)):
             if not thumb and url:
                 urls_sem_capa.append((idx, url))
 
-        # Resolução assíncrona concorrente de capas sem travar o worker
         if urls_sem_capa:
             tarefas_capas = [obter_capa_soundcloud(u) for _, u in urls_sem_capa]
             capas_resolvidas = await asyncio.gather(*tarefas_capas, return_exceptions=True)
@@ -703,10 +692,10 @@ async def baixar_mp3(
                 "detalhe": "Processando áudio"
             }
 
-    # SELETOR DE STREAM OTIMIZADO:
-    # Prioriza o stream HTTP progressivo do SoundCloud (http_mp3_128).
-    # Baixa como arquivo contínuo único (0.5 a 1.0s) em vez de 100 fragmentos HLS!
-    fmt_stream = "http_mp3_128/bestaudio[protocol=http][ext=mp3]/bestaudio[ext=mp3]/bestaudio[protocol=http]/bestaudio/best"
+    # SELETOR DE STREAM TURBO:
+    # Prioriza formatos nativos MP3 do SoundCloud (http_mp3_128 e hls_mp3_128)
+    # Evita que o yt-dlp escolha Opus desnecessariamente, eliminando a recodificação lenta no Render!
+    fmt_stream = "http_mp3_128/hls_mp3_128/bestaudio[acodec=mp3]/bestaudio[acodec^=mp3]/bestaudio[ext=mp3]/bestaudio/best"
 
     postprocessors = [
         {
@@ -714,16 +703,17 @@ async def baixar_mp3(
             'preferredcodec': 'mp3',
             'preferredquality': cfg_qualidade['codec'],
             'nopostoverwrites': False
-        },
-        {'key': 'FFmpegMetadata'},
+        }
+        # FFmpegMetadata removido: o mutagen grava as tags ID3 completas em 5ms sem reescrever o arquivo com FFmpeg!
     ]
 
     opts = {
         "format": fmt_stream,
         "outtmpl": os.path.join(pasta_tarefa, "%(title)s.%(ext)s"),
         "noplaylist": True,
+        "concurrent_fragment_downloads": 8,  # Baixa múltiplos pedaços de HLS simultaneamente em paralelo!
         "postprocessors": postprocessors,
-        "postprocessor_args": ["-threads", "0"],
+        "postprocessor_args": ["-threads", "0", "-compression_level", "9"],
         "progress_hooks": [hook],
         "quiet": True,
         "no_warnings": True,
@@ -738,7 +728,12 @@ async def baixar_mp3(
         titulo_final = titulo or info.get("title", "musica")
         artista_final = artista or info.get("uploader", "")
         duracao_seg = duracao or info.get("duration")
-        thumb = info.get("thumbnail") or await obter_capa_soundcloud(url)
+
+        progresso_downloads[clean_id] = {
+            "pct": 88,
+            "status": "Stream pronto! Aplicando metadados ID3...",
+            "detalhe": "Finalizando áudio"
+        }
 
         # Localiza o arquivo gerado na pasta isolada
         arquivos_mp3 = glob.glob(os.path.join(pasta_tarefa, "*.mp3")) + glob.glob(os.path.join(pasta_tarefa, "*.MP3"))
@@ -751,22 +746,29 @@ async def baixar_mp3(
         else:
             arquivo_final = arquivos_mp3[0]
 
-        # 1. Tags básicas ID3 (Título e Artista)
+        # 1. Tags básicas ID3 em memória com mutagen (5ms)
         corrigir_tags(arquivo_final, titulo_final, artista_final)
 
-        # 2. Capa em alta definição (iTunes HD ou SoundCloud Oficial)
-        capa_alvo = capa_custom if (capa_custom and url_valida_http(capa_custom)) else (thumb if (thumb and url_valida_http(thumb)) else None)
+        # 2. Capa em alta definição (só faz requisição se capa_custom não tiver sido enviada)
+        capa_alvo = capa_custom if (capa_custom and url_valida_http(capa_custom)) else None
+        if not capa_alvo:
+            thumb = info.get("thumbnail")
+            if not thumb:
+                thumb = await obter_capa_soundcloud(url)
+            if thumb and url_valida_http(thumb):
+                capa_alvo = thumb
+
         if capa_alvo:
             progresso_downloads[clean_id] = {
-                "pct": 90,
+                "pct": 92,
                 "status": "Embutindo arte de capa oficial HD...",
                 "detalhe": "Tag ID3 APIC"
             }
             await embutir_capa_url(arquivo_final, capa_alvo)
 
-        # 3. LETRAS (Obtidas instantaneamente pois a busca rodou em paralelo)
+        # 3. LETRAS (Obtidas da tarefa que já rodou em paralelo durante o download)
         progresso_downloads[clean_id] = {
-            "pct": 95,
+            "pct": 96,
             "status": "Embutindo letras sincronizadas...",
             "detalhe": "Tag ID3 USLT"
         }
