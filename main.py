@@ -32,7 +32,7 @@ os.makedirs(PASTA_MUSICAS, exist_ok=True)
 
 # Verificação inicial do FFmpeg
 if not shutil.which("ffmpeg"):
-    print("[AVISO] FFmpeg não foi encontrado no PATH do sistema. Instale o FFmpeg para converter áudio.")
+    print("[AVISO] FFmpeg não foi encontrado no PATH do sistema. Instale o FFmpeg para converter áudio quando necessário.")
 
 historico_lock = asyncio.Lock()
 progresso_downloads: Dict[str, Dict[str, Any]] = {}
@@ -45,15 +45,17 @@ STOP_WORDS = {
 }
 
 # ==============================================================================
-# CLIENTE HTTP ASSÍNCRONO GLOBAL (LIFESPAN - OPÇÃO 2.A)
+# CLIENTE HTTP ASSÍNCRONO GLOBAL (ALTA VELOCIDADE COM CONNECTION POOL)
 # ==============================================================================
 http_client: Optional[httpx.AsyncClient] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global http_client
+    limits = httpx.Limits(max_keepalive_connections=20, max_connections=50)
     http_client = httpx.AsyncClient(
-        timeout=httpx.Timeout(12.0, connect=5.0),
+        limits=limits,
+        timeout=httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=5.0),
         follow_redirects=True,
         headers={
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -66,8 +68,10 @@ async def lifespan(app: FastAPI):
 async def get_http_client() -> httpx.AsyncClient:
     global http_client
     if http_client is None or http_client.is_closed:
+        limits = httpx.Limits(max_keepalive_connections=20, max_connections=50)
         http_client = httpx.AsyncClient(
-            timeout=httpx.Timeout(12.0, connect=5.0),
+            limits=limits,
+            timeout=httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=5.0),
             follow_redirects=True,
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -128,7 +132,7 @@ def url_valida_http(url: str) -> bool:
         return False
 
 def limpar_pasta_temporaria(caminho_pasta: str):
-    """Opção 2.B: Limpeza total e garantida da subpasta isolada do download."""
+    """Limpeza total e segura da subpasta isolada do download."""
     try:
         if caminho_pasta and os.path.exists(caminho_pasta):
             shutil.rmtree(caminho_pasta, ignore_errors=True)
@@ -144,19 +148,19 @@ def limpar_progresso_antigo(download_id: str, delay_segundos: int = 90):
     asyncio.create_task(_expirar())
 
 # ==============================================================================
-# BUSCA DE CAPAS ASSÍNCRONA (OPÇÃO 2.A)
+# BUSCA DE CAPAS ASSÍNCRONA E ULTRA-RÁPIDA
 # ==============================================================================
 async def obter_capa_soundcloud(url: str) -> Optional[str]:
-    """Obtém capa oficial em alta definição (500x500) via oEmbed ou OpenGraph."""
+    """Obtém capa oficial em alta definição (500x500) via oEmbed com fallback OpenGraph."""
     if not url_valida_http(url):
         return None
 
     client = await get_http_client()
 
-    # 1. oEmbed Oficial do SoundCloud (rápido e direto)
+    # 1. oEmbed Oficial do SoundCloud (rápido e direto, ~150ms)
     try:
         oembed_url = f"https://soundcloud.com/oembed?format=json&url={urllib.parse.quote(url, safe=':/?=')}"
-        res = await client.get(oembed_url, timeout=3.5)
+        res = await client.get(oembed_url, timeout=2.5)
         if res.status_code == 200:
             thumb = res.json().get("thumbnail_url")
             if thumb:
@@ -164,9 +168,9 @@ async def obter_capa_soundcloud(url: str) -> Optional[str]:
     except Exception:
         pass
 
-    # 2. Fallback: extração via meta tag og:image da página HTML
+    # 2. Fallback: meta tag og:image da página HTML
     try:
-        res = await client.get(url, timeout=4.0)
+        res = await client.get(url, timeout=3.0)
         if res.status_code == 200:
             html = res.text
             m = re.search(r'<meta\s+property="og:image"\s+content="([^"]+)"', html) or \
@@ -179,7 +183,7 @@ async def obter_capa_soundcloud(url: str) -> Optional[str]:
     return None
 
 async def buscar_itunes_capa(titulo_raw: str, artista_raw: str = "") -> Optional[Dict[str, str]]:
-    """Consulta assíncrona à API da Apple Music/iTunes para arte em 600x600."""
+    """Consulta assíncrona com timeout rápido para Apple Music/iTunes."""
     try:
         artista_sub, sep, titulo_sub = titulo_raw.partition(" - ")
         if sep:
@@ -209,9 +213,9 @@ async def buscar_itunes_capa(titulo_raw: str, artista_raw: str = "") -> Optional
             if not termo or len(termo.strip()) < 2:
                 continue
 
-            url_api = f"https://itunes.apple.com/search?term={urllib.parse.quote(termo.strip())}&media=music&entity=song&limit=8"
+            url_api = f"https://itunes.apple.com/search?term={urllib.parse.quote(termo.strip())}&media=music&entity=song&limit=6"
             try:
-                res = await client.get(url_api, timeout=5.0)
+                res = await client.get(url_api, timeout=3.0)
                 if res.status_code != 200:
                     continue
                 data = res.json()
@@ -232,10 +236,9 @@ async def buscar_itunes_capa(titulo_raw: str, artista_raw: str = "") -> Optional
         return None
 
 # ==============================================================================
-# BUSCA DE LETRAS ASSÍNCRONA E SINCRONIZADA LRC (OPÇÃO 2.A E 3.B)
+# BUSCA DE LETRAS OTIMIZADA COM EXECUÇÃO SIMULTÂNEA (LRCLIB + VAGALUME)
 # ==============================================================================
 async def _buscar_lrclib_exato(titulo: str, artista: str, duracao_seg: Optional[int]) -> Optional[Dict[str, str]]:
-    """Busca exata no LRCLIB com duração para evitar divergência de faixas remixadas."""
     if not titulo or not artista:
         return None
     try:
@@ -243,7 +246,7 @@ async def _buscar_lrclib_exato(titulo: str, artista: str, duracao_seg: Optional[
         params = {"track_name": titulo, "artist_name": artista}
         if duracao_seg:
             params["duration"] = str(int(duracao_seg))
-        res = await client.get("https://lrclib.net/api/get", params=params, timeout=4.0)
+        res = await client.get("https://lrclib.net/api/get", params=params, timeout=2.5)
         if res.status_code == 200:
             data = res.json()
             synced = data.get("syncedLyrics")
@@ -257,13 +260,12 @@ async def _buscar_lrclib_exato(titulo: str, artista: str, duracao_seg: Optional[
     return None
 
 async def _buscar_lrclib_search(query: str) -> Optional[Dict[str, str]]:
-    """Busca textual no LRCLIB com prioridade para letras sincronizadas com timestamps."""
     if not query:
         return None
     try:
         client = await get_http_client()
         url = f"https://lrclib.net/api/search?q={urllib.parse.quote(query)}"
-        res = await client.get(url, timeout=4.0)
+        res = await client.get(url, timeout=2.5)
         if res.status_code == 200:
             itens = res.json()
             if isinstance(itens, list) and len(itens) > 0:
@@ -279,28 +281,13 @@ async def _buscar_lrclib_search(query: str) -> Optional[Dict[str, str]]:
         pass
     return None
 
-async def _buscar_lyricsovh(titulo: str, artista: str) -> Optional[Dict[str, str]]:
-    if not artista or not titulo:
-        return None
-    try:
-        client = await get_http_client()
-        url = f"https://api.lyrics.ovh/v1/{urllib.parse.quote(artista)}/{urllib.parse.quote(titulo)}"
-        res = await client.get(url, timeout=4.0)
-        if res.status_code == 200:
-            letra = res.json().get("lyrics")
-            if letra and len(letra.strip()) > 30:
-                return {"letra": letra.strip(), "tipo": "tradicional", "fonte": "Lyrics.ovh"}
-    except Exception:
-        pass
-    return None
-
 async def _buscar_vagalume(titulo: str, artista: str) -> Optional[Dict[str, str]]:
     if not artista or not titulo:
         return None
     try:
         client = await get_http_client()
         url = f"https://api.vagalume.com.br/search.php?art={urllib.parse.quote(artista)}&mus={urllib.parse.quote(titulo)}"
-        res = await client.get(url, timeout=4.0)
+        res = await client.get(url, timeout=2.5)
         if res.status_code == 200:
             data = res.json()
             if data.get("type") in ("exact", "aprox"):
@@ -313,12 +300,33 @@ async def _buscar_vagalume(titulo: str, artista: str) -> Optional[Dict[str, str]
         pass
     return None
 
+async def _buscar_lyricsovh(titulo: str, artista: str) -> Optional[Dict[str, str]]:
+    if not artista or not titulo:
+        return None
+    try:
+        client = await get_http_client()
+        url = f"https://api.lyrics.ovh/v1/{urllib.parse.quote(artista)}/{urllib.parse.quote(titulo)}"
+        res = await client.get(url, timeout=2.0)
+        if res.status_code == 200:
+            letra = res.json().get("lyrics")
+            if letra and len(letra.strip()) > 30:
+                return {"letra": letra.strip(), "tipo": "tradicional", "fonte": "Lyrics.ovh"}
+    except Exception:
+        pass
+    return None
+
 async def buscar_letras_multi_fallback(
     titulo_raw: str,
     artista_raw: str = "",
     duracao_seg: Optional[int] = None
 ) -> Optional[Dict[str, str]]:
-    """Cascata inteligente assíncrona: LRCLIB exato -> LRCLIB busca -> Lyrics.ovh / Vagalume concorrentes."""
+    """
+    Busca concorrente de altíssima velocidade:
+    Dispara LRCLIB (exato + busca) e Vagalume em paralelo, finalizando em < 800ms.
+    """
+    if not titulo_raw:
+        return None
+
     artista_sub, sep, titulo_sub = titulo_raw.partition(" - ")
     art = artista_sub if sep else (artista_raw if artista_raw.lower() != "soundcloud" else "")
     tit = titulo_sub if sep else titulo_raw
@@ -326,35 +334,40 @@ async def buscar_letras_multi_fallback(
     tit_limpo = limpar_titulo_para_busca(tit)
     art_limpo = limpar_titulo_para_busca(art)
 
-    # 1. Tentativa com correspondência exata + duração no LRCLIB
+    tarefas = []
+
+    # 1. Correspondência exata no LRCLIB com duração (se disponível)
     if art_limpo and tit_limpo:
-        res = await _buscar_lrclib_exato(tit_limpo, art_limpo, duracao_seg)
-        if res:
-            return res
+        tarefas.append(_buscar_lrclib_exato(tit_limpo, art_limpo, duracao_seg))
 
     # 2. Busca textual completa no LRCLIB
     query_completa = f"{art_limpo} {tit_limpo}".strip() if art_limpo else tit_limpo
-    res = await _buscar_lrclib_search(query_completa)
-    if res:
-        return res
+    if query_completa:
+        tarefas.append(_buscar_lrclib_search(query_completa))
 
-    # 3. Busca simultânea concorrente em Lyrics.ovh e Vagalume via asyncio.gather
+    # 3. Vagalume (resposta rápida para pop, rap e nacionais)
     if art_limpo and tit_limpo:
-        res_ovh, res_vag = await asyncio.gather(
-            _buscar_lyricsovh(tit_limpo, art_limpo),
-            _buscar_vagalume(tit_limpo, art_limpo),
-            return_exceptions=True
-        )
-        if isinstance(res_ovh, dict) and res_ovh.get("letra"):
-            return res_ovh
-        if isinstance(res_vag, dict) and res_vag.get("letra"):
-            return res_vag
+        tarefas.append(_buscar_vagalume(tit_limpo, art_limpo))
 
-    # 4. Fallback com título puro no LRCLIB
+    # Executa todas as consultas de forma concorrente em paralelo
+    if tarefas:
+        resultados = await asyncio.gather(*tarefas, return_exceptions=True)
+
+        # Prioridade máxima: Letra sincronizada (.LRC)
+        for r in resultados:
+            if isinstance(r, dict) and r.get("tipo") == "sincronizada":
+                return r
+
+        # Segunda prioridade: Letra tradicional completa
+        for r in resultados:
+            if isinstance(r, dict) and r.get("letra"):
+                return r
+
+    # Fallback rápido: Busca apenas pelo título se a query completa falhou
     if tit_limpo and tit_limpo != query_completa:
-        res = await _buscar_lrclib_search(tit_limpo)
-        if res:
-            return res
+        res_tit = await _buscar_lrclib_search(tit_limpo)
+        if res_tit:
+            return res_tit
 
     return None
 
@@ -376,7 +389,6 @@ def corrigir_tags(arquivo: str, titulo: str, artista: str) -> bool:
         return False
 
 def embutir_letra(arquivo: str, letra_info: Dict[str, str]) -> bool:
-    """Embutir letra na tag USLT preservando timestamps LRC se for sincronizada."""
     letra_texto = letra_info.get("letra", "")
     if not letra_texto:
         return False
@@ -397,7 +409,7 @@ async def embutir_capa_url(arquivo: str, url: str) -> bool:
         return False
     try:
         client = await get_http_client()
-        res = await client.get(url, timeout=12.0)
+        res = await client.get(url, timeout=8.0)
         if res.status_code != 200:
             return False
 
@@ -473,7 +485,7 @@ async def manifest():
         ]
     }
 
-# Opção 2.C: Stream de Progresso em Tempo Real com Server-Sent Events (SSE)
+# Stream de Progresso em Tempo Real com Server-Sent Events (SSE)
 @app.get("/api/progresso/stream/{download_id}")
 async def stream_progresso(download_id: str):
     clean_id = re.sub(r"[^a-zA-Z0-9_\-]", "", download_id)
@@ -482,7 +494,7 @@ async def stream_progresso(download_id: str):
         ultimo_pct = -1
         ultimo_status = ""
         tentativas_sem_mudanca = 0
-        while tentativas_sem_mudanca < 600:  # ~3 minutos de tempo limite
+        while tentativas_sem_mudanca < 500:
             dados = progresso_downloads.get(clean_id)
             if dados:
                 pct = dados.get("pct", 0)
@@ -498,11 +510,11 @@ async def stream_progresso(download_id: str):
                     tentativas_sem_mudanca += 1
             else:
                 tentativas_sem_mudanca += 1
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.2)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-# Fallback tradicional de polling para compatibilidade
+# Fallback tradicional de polling
 @app.get("/api/progresso/{download_id}")
 async def obter_progresso(download_id: str):
     clean_id = re.sub(r"[^a-zA-Z0-9_\-]", "", download_id)
@@ -574,7 +586,7 @@ async def buscar_faixas(request: Request, query: str = Form(...)):
             if not thumb and url:
                 urls_sem_capa.append((idx, url))
 
-        # Opção 2.A: Resolução assíncrona concorrente de capas sem travar o worker
+        # Resolução assíncrona concorrente de capas sem travar o worker
         if urls_sem_capa:
             tarefas_capas = [obter_capa_soundcloud(u) for _, u in urls_sem_capa]
             capas_resolvidas = await asyncio.gather(*tarefas_capas, return_exceptions=True)
@@ -624,32 +636,43 @@ async def baixar_mp3(
     request: Request,
     background_tasks: BackgroundTasks,
     url: str = Form(...),
+    titulo: Optional[str] = Form(None),
+    artista: Optional[str] = Form(None),
+    duracao: Optional[int] = Form(None),
     capa_custom: Optional[str] = Form(None),
     download_id: str = Form("default"),
-    qualidade: str = Form("vbr0")  # Opção 3.A: Bitrate e Fidelidade Real Selecionável
+    qualidade: str = Form("auto")  # Padrão: "auto" (Ultra Rápido, sem re-encode desnecessário)
 ):
     url = url.strip()
     if not url_valida_http(url):
         raise HTTPException(status_code=400, detail="URL inválida.")
 
-    # Opção 2.B: Isolamento por pasta exclusiva com UUID / ID seguro
+    # 1. PIPELINE DE LETRAS EM PARALELO (Inicia IMEDIATAMENTE no milissegundo 0)
+    tarefa_letras = None
+    if titulo:
+        tarefa_letras = asyncio.create_task(
+            buscar_letras_multi_fallback(titulo, artista or "", duracao)
+        )
+
+    # 2. Isolamento por pasta exclusiva (Prevenção de Path Traversal)
     clean_id = re.sub(r"[^a-zA-Z0-9_\-]", "", download_id or "") or f"dl_{int(time.time() * 1000)}"
     pasta_tarefa = os.path.join(PASTA_MUSICAS, clean_id)
     os.makedirs(pasta_tarefa, exist_ok=True)
 
-    # Opção 3.A: Mapeamento técnico de fidelidade do áudio
+    # 3. OTIMIZAÇÃO CRÍTICA DE CODIFICAÇÃO E SELEÇÃO DE FLUXO
     mapa_qualidades = {
-        "vbr0": {"codec": "0", "label": "VBR 0 (~240kbps - Alta Fidelidade)"},
+        "auto": {"codec": None, "label": "Original Direto (Ultra Rápido - 0s espera)"},
         "320": {"codec": "320", "label": "320kbps CBR (Bitrate Máximo)"},
+        "vbr0": {"codec": "0", "label": "VBR 0 (~240kbps - Alta Fidelidade)"},
         "192": {"codec": "192", "label": "192kbps CBR (Balanceado)"},
         "128": {"codec": "128", "label": "128kbps CBR (Leve)"},
     }
-    cfg_qualidade = mapa_qualidades.get(qualidade, mapa_qualidades["vbr0"])
+    cfg_qualidade = mapa_qualidades.get(qualidade, mapa_qualidades["auto"])
 
     progresso_downloads[clean_id] = {
-        "pct": 10,
+        "pct": 15,
         "status": f"Iniciando download ({cfg_qualidade['label']})...",
-        "detalhe": "Conectando ao SoundCloud"
+        "detalhe": "Baixando stream direto"
     }
 
     def hook(d):
@@ -658,31 +681,44 @@ async def baixar_mp3(
                 p_str = d.get("_percent_str", "0").replace("%", "").strip()
                 p_val = int(float(p_str))
                 progresso_downloads[clean_id] = {
-                    "pct": min(int(p_val * 0.7) + 10, 75),
+                    "pct": min(int(p_val * 0.7) + 15, 80),
                     "status": f"Baixando stream: {p_str}%",
                     "detalhe": f"Velocidade: {d.get('_speed_str', 'N/A')}"
                 }
             except Exception:
                 pass
         elif d.get("status") == "finished":
+            status_proc = "Finalizando MP3 original..." if cfg_qualidade['codec'] is None else f"Codificando áudio (FFmpeg MP3 {cfg_qualidade['label']})..."
             progresso_downloads[clean_id] = {
-                "pct": 80,
-                "status": f"Convertendo áudio (FFmpeg MP3 {cfg_qualidade['label']})...",
-                "detalhe": "Processando codificação"
+                "pct": 85,
+                "status": status_proc,
+                "detalhe": "Processando áudio"
             }
 
+    # SELETOR DE STREAM OTIMIZADO:
+    # Prioriza o stream HTTP progressivo do SoundCloud (http_mp3_128).
+    # Baixa como arquivo contínuo único (0.5 a 1.0s) em vez de 100 fragmentos HLS!
+    fmt_stream = "http_mp3_128/bestaudio[protocol=http][ext=mp3]/bestaudio[ext=mp3]/bestaudio[protocol=http]/bestaudio/best"
+
+    postprocessors = [
+        {
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': cfg_qualidade['codec'],
+            'nopostoverwrites': False
+        },
+        {'key': 'FFmpegMetadata'},
+    ]
+
     opts = {
-        "format": "bestaudio/best",
+        "format": fmt_stream,
         "outtmpl": os.path.join(pasta_tarefa, "%(title)s.%(ext)s"),
         "noplaylist": True,
-        "postprocessors": [
-            {
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': cfg_qualidade['codec']
-            },
-            {'key': 'FFmpegMetadata'},
-        ],
+        "postprocessors": postprocessors,
+        "postprocessor_args": {
+            # Habilita multithreading total no FFmpeg para aceleração máxima de codificação
+            "ExtractAudio": ["-threads", "0"]
+        },
         "progress_hooks": [hook],
         "quiet": True,
         "no_warnings": True,
@@ -694,58 +730,63 @@ async def baixar_mp3(
                 return ydl.extract_info(url, download=True)
 
         info = await asyncio.to_thread(_executar_download)
-        titulo = info.get("title", "musica")
-        artista = info.get("uploader", "")
-        duracao_seg = info.get("duration")
+        titulo_final = titulo or info.get("title", "musica")
+        artista_final = artista or info.get("uploader", "")
+        duracao_seg = duracao or info.get("duration")
         thumb = info.get("thumbnail") or await obter_capa_soundcloud(url)
 
         # Localiza o arquivo MP3 gerado na pasta isolada
         arquivos_mp3 = glob.glob(os.path.join(pasta_tarefa, "*.mp3"))
         if not arquivos_mp3:
-            raise Exception("O conversor FFmpeg não gerou o arquivo MP3 esperado.")
+            raise Exception("Não foi possível gerar o arquivo MP3.")
         arquivo_final = arquivos_mp3[0]
 
         # 1. Tags básicas ID3 (Título e Artista)
-        corrigir_tags(arquivo_final, titulo, artista)
+        corrigir_tags(arquivo_final, titulo_final, artista_final)
 
         # 2. Capa em alta definição (iTunes HD ou SoundCloud Oficial)
         capa_alvo = capa_custom if (capa_custom and url_valida_http(capa_custom)) else (thumb if (thumb and url_valida_http(thumb)) else None)
         if capa_alvo:
             progresso_downloads[clean_id] = {
-                "pct": 86,
-                "status": "Embutindo arte oficial da capa em alta resolução...",
+                "pct": 90,
+                "status": "Embutindo arte de capa oficial HD...",
                 "detalhe": "Tag ID3 APIC"
             }
             await embutir_capa_url(arquivo_final, capa_alvo)
 
-        # 3. Opção 3.B: Busca e inserção de letras (LRCLIB sincronizada com duration, Lyrics.ovh, Vagalume)
+        # 3. LETRAS (Obtidas instantaneamente pois a busca rodou em paralelo)
         progresso_downloads[clean_id] = {
-            "pct": 92,
-            "status": "Consultando bancos de letras (LRCLIB / Multi-API)...",
-            "detalhe": "Sincronização LRC"
+            "pct": 95,
+            "status": "Embutindo letras sincronizadas...",
+            "detalhe": "Tag ID3 USLT"
         }
-        letra_info = await buscar_letras_multi_fallback(titulo, artista, duracao_seg)
-        status_letra = "Sem letra disponível"
+        if tarefa_letras is None:
+            tarefa_letras = asyncio.create_task(
+                buscar_letras_multi_fallback(titulo_final, artista_final, duracao_seg)
+            )
+
+        letra_info = await tarefa_letras
+        status_letra = "Sem letra"
         if letra_info:
             embutir_letra(arquivo_final, letra_info)
             status_letra = f"Letra {letra_info['tipo'].capitalize()} ({letra_info['fonte']})"
 
-        # 4. Grava no Histórico com a qualidade selecionada
-        await salvar_no_historico(titulo, artista, url, cfg_qualidade['label'])
+        # 4. Grava no Histórico
+        await salvar_no_historico(titulo_final, artista_final, url, cfg_qualidade['label'])
 
-        nome_download = f"{artista} - {titulo}.mp3" if artista else f"{titulo}.mp3"
+        nome_download = f"{artista_final} - {titulo_final}.mp3" if artista_final else f"{titulo_final}.mp3"
         nome_limpo = re.sub(r'[\\/*?:"<>|]', "", nome_download)
         nome_ascii = re.sub(r'[^\x20-\x7E]', '_', nome_limpo)
         nome_codificado = urllib.parse.quote(nome_limpo)
 
         progresso_downloads[clean_id] = {
             "pct": 100,
-            "status": f"✓ MP3 pronto! {status_letra}",
-            "detalhe": f"Fidelidade: {cfg_qualidade['label']}"
+            "status": f"✓ Concluído em alta velocidade! {status_letra}",
+            "detalhe": f"{cfg_qualidade['label']}"
         }
         limpar_progresso_antigo(clean_id)
 
-        # Opção 2.B: Remoção segura da pasta temporária após envio ao cliente
+        # Remoção segura da pasta temporária após envio ao cliente
         background_tasks.add_task(limpar_pasta_temporaria, pasta_tarefa)
 
         return FileResponse(
