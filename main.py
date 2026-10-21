@@ -638,7 +638,7 @@ async def baixar_mp3(
     url: str = Form(...),
     titulo: Optional[str] = Form(None),
     artista: Optional[str] = Form(None),
-    duracao: Optional[int] = Form(None),
+    duracao: Optional[str] = Form(None),
     capa_custom: Optional[str] = Form(None),
     download_id: str = Form("default"),
     qualidade: str = Form("auto")  # Padrão: "auto" (Ultra Rápido, sem re-encode desnecessário)
@@ -647,11 +647,19 @@ async def baixar_mp3(
     if not url_valida_http(url):
         raise HTTPException(status_code=400, detail="URL inválida.")
 
+    # Converte duração de forma segura
+    duracao_seg_val = None
+    if duracao:
+        try:
+            duracao_seg_val = int(float(str(duracao).strip()))
+        except (ValueError, TypeError):
+            duracao_seg_val = None
+
     # 1. PIPELINE DE LETRAS EM PARALELO (Inicia IMEDIATAMENTE no milissegundo 0)
     tarefa_letras = None
     if titulo:
         tarefa_letras = asyncio.create_task(
-            buscar_letras_multi_fallback(titulo, artista or "", duracao)
+            buscar_letras_multi_fallback(titulo, artista or "", duracao_seg_val)
         )
 
     # 2. Isolamento por pasta exclusiva (Prevenção de Path Traversal)
@@ -715,10 +723,7 @@ async def baixar_mp3(
         "outtmpl": os.path.join(pasta_tarefa, "%(title)s.%(ext)s"),
         "noplaylist": True,
         "postprocessors": postprocessors,
-        "postprocessor_args": {
-            # Habilita multithreading total no FFmpeg para aceleração máxima de codificação
-            "ExtractAudio": ["-threads", "0"]
-        },
+        "postprocessor_args": ["-threads", "0"],
         "progress_hooks": [hook],
         "quiet": True,
         "no_warnings": True,
@@ -735,11 +740,16 @@ async def baixar_mp3(
         duracao_seg = duracao or info.get("duration")
         thumb = info.get("thumbnail") or await obter_capa_soundcloud(url)
 
-        # Localiza o arquivo MP3 gerado na pasta isolada
-        arquivos_mp3 = glob.glob(os.path.join(pasta_tarefa, "*.mp3"))
+        # Localiza o arquivo gerado na pasta isolada
+        arquivos_mp3 = glob.glob(os.path.join(pasta_tarefa, "*.mp3")) + glob.glob(os.path.join(pasta_tarefa, "*.MP3"))
         if not arquivos_mp3:
-            raise Exception("Não foi possível gerar o arquivo MP3.")
-        arquivo_final = arquivos_mp3[0]
+            todos_arquivos = glob.glob(os.path.join(pasta_tarefa, "*.*"))
+            if todos_arquivos:
+                arquivo_final = todos_arquivos[0]
+            else:
+                raise Exception("Não foi possível gerar o arquivo de áudio.")
+        else:
+            arquivo_final = arquivos_mp3[0]
 
         # 1. Tags básicas ID3 (Título e Artista)
         corrigir_tags(arquivo_final, titulo_final, artista_final)
@@ -761,8 +771,10 @@ async def baixar_mp3(
             "detalhe": "Tag ID3 USLT"
         }
         if tarefa_letras is None:
+            dur_info = info.get("duration")
+            dur_calc = duracao_seg_val or (int(float(dur_info)) if dur_info else None)
             tarefa_letras = asyncio.create_task(
-                buscar_letras_multi_fallback(titulo_final, artista_final, duracao_seg)
+                buscar_letras_multi_fallback(titulo_final, artista_final, dur_calc)
             )
 
         letra_info = await tarefa_letras

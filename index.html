@@ -292,7 +292,12 @@
       try {
         const response = await fetch('/api/buscar', { method: 'POST', body: formData });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Erro na busca.");
+        if (!response.ok) {
+          let msg = "Erro na busca.";
+          if (typeof data.detail === "string") msg = data.detail;
+          else if (Array.isArray(data.detail)) msg = data.detail.map(d => d.msg || JSON.stringify(d)).join("; ");
+          throw new Error(msg);
+        }
         
         if (!data.resultados || data.resultados.length === 0) {
           status.className = "text-center text-xs font-semibold text-slate-400 bg-slate-800/40 py-2.5 rounded-xl block border border-slate-700/60";
@@ -338,7 +343,6 @@
             </div>
           `;
 
-          // Eventos seguros e rápidos passando todos os metadados para otimização
           div.querySelector('.btn-ouvir').addEventListener('click', () => {
             ouvirPrevia(item.url, item.titulo);
           });
@@ -368,7 +372,12 @@
       try {
         const response = await fetch('/api/stream', { method: 'POST', body: formData });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Não foi possível carregar o áudio.");
+        if (!response.ok) {
+          let msg = "Não foi possível carregar o áudio.";
+          if (typeof data.detail === "string") msg = data.detail;
+          else if (Array.isArray(data.detail)) msg = data.detail.map(d => d.msg || JSON.stringify(d)).join("; ");
+          throw new Error(msg);
+        }
 
         audioElement.src = data.stream_url;
         playerTitulo.innerText = titulo;
@@ -525,7 +534,10 @@
       formData.append('qualidade', qualidadeSelecionada);
       if (tituloOriginal) formData.append('titulo', tituloOriginal);
       if (artistaOriginal) formData.append('artista', artistaOriginal);
-      if (duracaoOriginal) formData.append('duracao', duracaoOriginal);
+      if (duracaoOriginal !== undefined && duracaoOriginal !== null && duracaoOriginal !== '') {
+        const segNum = Math.round(Number(duracaoOriginal) || 0);
+        if (segNum > 0) formData.append('duracao', String(segNum));
+      }
       if (capaFinal) formData.append('capa_custom', capaFinal);
 
       try {
@@ -533,8 +545,18 @@
         fecharStreams();
 
         if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.detail || "Erro ao baixar.");
+          let msg = "Erro ao baixar.";
+          try {
+            const data = await response.json();
+            if (typeof data.detail === "string") {
+              msg = data.detail;
+            } else if (Array.isArray(data.detail)) {
+              msg = data.detail.map(d => d.msg || (d.loc ? d.loc.join('.') + ': ' + d.msg : JSON.stringify(d))).join("; ");
+            } else if (typeof data.detail === "object" && data.detail !== null) {
+              msg = JSON.stringify(data.detail);
+            }
+          } catch (_) {}
+          throw new Error(msg);
         }
 
         pPct.innerText = "100%";
